@@ -1,0 +1,4 @@
+Building DAG of jobs...
+Nothing to be done.
+Shutting down, this might take some time.
+Complete log: /srv/gsfs0/projects/bhatt/moss/tools/classification_and_binning/bin_wf/.snakemake/log/2018-03-08T115531.779476.snakemake.log
