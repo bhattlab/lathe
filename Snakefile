@@ -175,10 +175,9 @@ rule kraken:
             mem=320,
             time=6,
             ntasks=24
-        config:
-            "--partition = nih_s10"
         shell:
-            "kraken --db {config['krakendb']} --fasta-input {input} --output {output} --preload --threads 24"
+            "kraken --db {krak} ".format(krak = config['krakendb']) +
+            " --fasta-input {input} --output {output} --preload --threads 24"
 
 rule kraken_translate:
     input:
@@ -199,7 +198,7 @@ rule label_bins:
         "{samp}/classify/{samp}.tsv".format(samp=config['sample']),
         "{samp}/bins/bin.1.fa".format(samp=config['sample'])
     output:
-        "{samp}/classify/bin_species_calls.tsv"
+        "{samp}/classify/bin_species_calls.tsv".format(samp=config['sample'])
     script:
         "scripts/assign_species.py"
 
@@ -210,7 +209,8 @@ rule postprocess:
         "{samp}/quast/".format(samp=config['sample']),
         "{samp}/checkm/checkm.tsv".format(samp=config['sample']),
         "{samp}/rna/rrna/bin.1.fa.txt".format(samp=config['sample']), #rrna.tsv
-        "{samp}/rna/trna/bin.1.fa.txt".format(samp=config['sample'])
+        "{samp}/rna/trna/bin.1.fa.txt".format(samp=config['sample']),
+        "{samp}/classify/bin_species_calls.tsv".format(samp=config['sample'])
     output:
         "{samp}/final/{samp}.tsv".format(samp=config['sample'])
     resources:
@@ -218,7 +218,7 @@ rule postprocess:
         time=1,
         ntasks=1
     shell:
-        "echo 'do final data collation.'"
+        "touch {output}"
 
 
     #collate assembly stats per organism for figure

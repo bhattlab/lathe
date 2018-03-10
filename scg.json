@@ -1,0 +1,13 @@
+{
+  "__default__" :
+    {
+    },
+    "kraken" :
+    {
+        "partition" : "nih_s10"
+    },
+  "bwa_align" :
+    {
+        "partition" : "nih_s10"
+    }
+}
