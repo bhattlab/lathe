@@ -7,14 +7,11 @@ classify = read.table(snakemake@input[[6]], sep = '\t', header = T, comment.char
 
 out = prokka
 
-out = merge(out, quast)
-
-out = merge(out, checkm)
-
-out = merge(out, trna)
-
-out = merge(out, rrna)
-
-out = merge(out, classify)
+out = merge(out, quast, all.x = T)
+out = merge(out, checkm, all.x = T)
+out = merge(out, trna, all.x = T)
+out = merge(out, rrna, all.x = T)
+out = merge(out, classify, all.x = T)
+out[is.na(out)] = 0
 
 write.table(out, snakemake@output[[1]], sep = "\t", quote = F, row.names = F)
