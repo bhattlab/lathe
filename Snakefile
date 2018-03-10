@@ -146,7 +146,9 @@ rule quast:
         time=2,
     threads: 24
     shell:
-        "ls {samp}/bins/ | xargs -n 1 -I foo -P " + "{threads} " + "sh -c 'quast.py -o {samp}/quast/foo {samp}/bins/foo \
+        "ls {samp}/bins/ | xargs -n 1 -I foo -P ".format(samp=config['sample']) + \
+		"{threads} " + \
+		"sh -c 'quast.py -o {samp}/quast/foo {samp}/bins/foo \
         --contig-thresholds 0,10000,50000,100000,250000,500000,1000000,2000000,3000000 --fast '".format(samp=config['sample'])
 
 rule prokka:
