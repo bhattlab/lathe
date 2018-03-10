@@ -14,7 +14,7 @@ rule bwa_index_setup:
     resources:
         mem=1,
         time=1,
-        ntasks=1
+    threads: 1
     shell:
         "cp {asm} {samp}/idx/{samp}.fa".format(asm = config['assembly'], samp = config['sample'])
 
@@ -33,7 +33,7 @@ rule bwa_index:
     resources:
         mem=8,
         time=24,
-        ntasks=4
+    threads: 1
     params:
         prefix="{samp}/idx/{samp}".format(samp=config['sample']),
         algorithm="bwtsw"
@@ -58,16 +58,14 @@ rule bwa_align:
     resources:
         mem=32,
         time=48,
-        ntasks=24
-#    config:
-#        "--partition 'nih_s10'"
+    threads: 24
     shell:
-        "bwa mem -t 24 {samp}/idx/{samp} {r1} {r2} ".format(
+        "bwa mem -t {threads}" + " {samp}/idx/{samp} {r1} {r2} ".format(
             samp=config['sample'],
             r1 = config['reads1'],
             r2 = config['reads2']
             ) +
-        " | samtools sort --threads 23 > {samp}/{samp}.bam".format(samp=config['sample'])
+        " | samtools sort --threads {threads}" + " > {samp}/{samp}.bam".format(samp=config['sample'])
 
 rule metabat:
     input:
@@ -80,9 +78,9 @@ rule metabat:
     resources:
         mem=64,
         time=24,
-        ntasks=24
+    threads: 24
     shell:
-        "~/moss/tools/classification_and_binning/metabat/runMetaBat.sh --seed 1 -t 24 --unbinned " \
+        "~/moss/tools/classification_and_binning/metabat/runMetaBat.sh --seed 1 -t {threads} --unbinned " \
         + "{input};" +
         " mv {samp}.fa.metabat-bins--unbinned/* {samp}/bins/; \
         rmdir {samp}.fa.metabat-bins--unbinned/; \
@@ -98,9 +96,9 @@ rule checkm:
     resources:
         mem=64,
         time=24,
-        ntasks=24
+    threads: 24
     shell:
-        "module add prodigal; checkm lineage_wf -t 24 -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm".format(samp=config['sample'])
+        "module add prodigal; checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm".format(samp=config['sample'])
 
 rule aragorn:
     input:
@@ -112,10 +110,12 @@ rule aragorn:
     resources:
         mem=8,
         time=1,
-        ntasks=24
+    threads: 24
     shell:
         "module add aragorn; \
-        ls {samp}/bins/ | xargs -n 1 -I foo -P 24 sh -c 'aragorn -t {samp}/bins/foo -o {samp}/rna/trna/foo.txt';".format(samp=config['sample'])
+        ls {samp}/bins/ | xargs -n 1 -I foo ".format(samp=config['sample']) +
+        "-P {threads} " +
+        "sh -c 'aragorn -t {samp}/bins/foo -o {samp}/rna/trna/foo.txt';".format(samp=config['sample'])
 #        grep Total {samp}/rna/trna/*.txt | sed 's/\.fa_trna\.txt\:Total tRNA genes = /\t/g' | sed 's/trna\///g' |sed 's/\.asm_/.asm\t/g' | sed 's/_canu_/_canu\t/g' | sed 's/spades_/spades\t/g' | sed 's/^ab./ab\t/g' | sed 's/^em./em\t/g' > trna.tsv
 
 rule barrnap:
@@ -128,10 +128,11 @@ rule barrnap:
     resources:
         mem=8,
         time=1,
-        ntasks=24
+    threads: 24
     shell:
         "module add barrnap; \
-        ls {samp}/bins/ | xargs -n 1 -I foo -P 24 sh -c 'barrnap {samp}/bins/foo > {samp}/rna/rrna/foo.txt'".format(samp=config['sample'])
+        ls {samp}/bins/ | xargs -n 1 -I foo ".format(samp=config['sample']) +
+        "-P {threads} " + "sh -c 'barrnap {samp}/bins/foo > {samp}/rna/rrna/foo.txt'".format(samp=config['sample'])
 
 rule quast:
     input:
@@ -143,9 +144,9 @@ rule quast:
     resources:
         mem=8,
         time=2,
-        ntasks=24
+    threads: 24
     shell:
-        "ls {samp}/bins/ | xargs -n 1 -I foo -P 24 sh -c 'quast.py -o {samp}/quast/foo {samp}/bins/foo \
+        "ls {samp}/bins/ | xargs -n 1 -I foo -P " + "{threads} " + "sh -c 'quast.py -o {samp}/quast/foo {samp}/bins/foo \
         --contig-thresholds 0,10000,50000,100000,250000,500000,1000000,2000000,3000000 --fast '".format(samp=config['sample'])
 
 rule prokka:
@@ -158,11 +159,11 @@ rule prokka:
     resources:
         mem=32,
         time=6,
-        ntasks=24
+    threads: 24
     shell:
         "module add prokka; \
-        prokka --outdir {samp}/prokka/ --prefix {samp} --centre X --compliant --force --cpus 24 ".format(samp=config['sample']) +
-        "{input}"
+        prokka --outdir {samp}/prokka/ --prefix {samp} --centre X --compliant --force ".format(samp=config['sample']) +
+        " --cpus {threads} {input}"
 
 rule kraken:
         input:
@@ -173,11 +174,11 @@ rule kraken:
             "{samp}/logs/kraken.log".format(samp=config['sample'])
         resources:
             mem=320,
-            time=6,
-            ntasks=24
+            time=6
+        threads: 24
         shell:
             "kraken --db {krak} ".format(krak = config['krakendb']) +
-            " --fasta-input {input} --output {output} --preload --threads 24"
+            " --fasta-input {input} --output {output} --preload --threads {threads}"
 
 rule kraken_translate:
     input:
@@ -189,18 +190,36 @@ rule kraken_translate:
     resources:
         mem=8,
         time=1,
-        ntasks=1
     shell:
-        "kraken-translate {input} --mpa-format --db {config['krakendb']} > {output}"
+        "kraken-translate {input} --mpa-format " +
+        "--db {krak} ".format(krak=config['krakendb']) +
+        "> {output}"
+
+rule fasta_index:
+    input:
+        "{samp}/bins/bin.1.fa".format(samp=config['sample'])
+    output:
+        "{samp}/bins/bin.1.fa.fai".format(samp=config['sample'])
+    log:
+        "{samp}/logs/faidx.log".format(samp=config['sample'])
+    resources:
+        mem=8,
+        time=1
+    threads: 24
+    shell:
+        "ls {samp}/bins/* | xargs -n 1 -P ".format(samp=config['sample']) +
+        " {threads} samtools faidx "
 
 rule label_bins:
     input:
         "{samp}/classify/{samp}.tsv".format(samp=config['sample']),
-        "{samp}/bins/bin.1.fa".format(samp=config['sample'])
+        "{samp}/bins/bin.1.fa.fai".format(samp=config['sample'])
     output:
         "{samp}/classify/bin_species_calls.tsv".format(samp=config['sample'])
+    log:
+        "{samp}/logs/assign_species.log".format(samp=config['sample'])
     script:
-        "scripts/assign_species.py"
+        "assign_species.py"
 
 
 rule postprocess:
@@ -216,7 +235,6 @@ rule postprocess:
     resources:
         mem=8,
         time=1,
-        ntasks=1
     shell:
         "touch {output}"
 
