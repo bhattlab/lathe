@@ -9,7 +9,7 @@ metagenomic assembly.
 ## circos_wf
 Snakemake workflow for visualizing assemblies of a particular genome across conditions and time points.  Calls out pre-identified sequences, highlights selected contigs.
 
-### Inputs
+#### Inputs
 
 	**Reference**: Sequence against which all others will be aligned. Forms the "backbone" of the circos plot. Multi-fasta.
 

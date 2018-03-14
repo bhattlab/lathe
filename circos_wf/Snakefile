@@ -1,69 +1,108 @@
 #!/usr/bin/env python
 
-localrules: bwa_index
+import os
+
+#localrules: faidx, assembly_alignment, assembly_alignment_filter, highlight_alignments, circos
+
+#parse the provided assemblies
+asm_cond_tp = {}
+
+with open(config['assemblies']) as asmf:
+	basedir = os.path.dirname(config['assemblies'])
+	for l in asmf.readlines():
+		s = l.split("\t")
+		if len(s) == 1:
+			continue
+
+		asm = os.path.join(basedir, s[0])
+		cond = s[1]
+		tp = s[2].strip()
+
+		asm_cond_tp[asm] = {}
+		asm_cond_tp[asm][cond] = tp
+
+aligned_filenames = ['_'.join([c, asm_cond_tp[asm][c]]) for asm in asm_cond_tp for c in asm_cond_tp[asm]]
+assembly_files = [k for k in asm_cond_tp]
 
 rule targets:
 	input:
 		config['reference'],
-		config['light_contigs'],
+		config['dark_contigs'],
 		config['highlight_sequences'],
 		config['assemblies']
 
-rule bwa_index_setup:
+rule faidx:
 	input:
 		config['reference']
 	output:
-		"{input}/idx/{input}.fa"
+		"{ref}.fai".format(ref =config['reference'])
+	shell:
+		"samtools faidx {input}"
+
+#Assembly alignments to reference
+rule assembly_alignment:
+	input:
+		config['reference'],
+		assembly_files
+	output:
+		expand("aligned/{fs}.coords", fs = aligned_filenames)
+#		temp("out.delta")
+	run:
+		for asm in asm_cond_tp:
+			for c in asm_cond_tp[asm]:
+				t = asm_cond_tp[asm][c]
+				shell("nucmer {input[0]} {asm} -p aligned/{c}_{t}; \
+					delta-filter -1 aligned/{c}_{t}.delta > aligned/{c}_{t}.delta.filt; \
+					show-coords aligned/{c}_{t}.delta.filt -T > aligned/{c}_{t}.coords; \
+				")
+
+rule assembly_alignment_filter:
+	input:
+		rules.assembly_alignment.output
+	output:
+		expand("aligned/{fs}.bed", fs = aligned_filenames)
+	params:
+		gap_width = "5000",
+	script:
+		"scripts/coord_filter.py"
+
+
+rule bwa_index:
+	input:
+		config['reference']
+	output:
+		"bwa_idx/ref.fa",
+		"bwa_idx/ref.fa.amb",
+		"bwa_idx/ref.fa.ann",
+		"bwa_idx/ref.fa.bwt",
+		"bwa_idx/ref.fa.pac",
+		"bwa_idx/ref.fa.sa"
 	resources:
 		mem=1,
 		time=1
 	threads: 1
 	shell:
-		"cp {input} {output}"
+		"ln -s ../{input} bwa_idx/ref.fa; bwa index bwa_idx/ref.fa"
 
-
-rule bwa_index:
-	input:
-		rules.bwa_index_setup.output
-	output:
-		"{input}.amb",
-		"{input}.ann",
-		"{input}.bwt",
-		"{input}.pac",
-		"{input}.sa",
-	log:
-		"log/bwa_index.log".format(samp=config['sample'])
-	resources:
-		mem=8,
-		time=24
-	threads: 1
-	params:
-		prefix="{rules.bwa_index_setup.output}",
-		algorithm="bwtsw"
-	wrapper:
-		"0.22.0/bio/bwa/index"
 
 #16S (highlight sequence) alignments
 rule highlight_alignments:
 	input:
-		rules.bwa_index.output,
+		"bwa_idx/ref.fa",
 		config['highlight_sequences']
 	output:
-		"highlight_alignments/highlights
-
-
-#contig alignments
-rule assembly_alignments:
-#nucmer ../../$REF ../../$TRUSEQ
-#delta-filter -1 out.delta > $(echo $ORGANISM)_truseq.delta.filt
-#rm out.delta
-#show-coords $(echo $ORGANISM)_truseq.delta.filt | tr '|' ' ' | tr -s ' ' '\t' > $(echo $ORGANISM)_truseq.coords
-#/srv/gsfs0/projects/bhatt/moss/projects/10x/tenex/coord_filter $(echo $ORGANISM)_truseq.coords 5000 | cut -f1,2,8,9 | tr ' ' '\t' | awk '{print $3, $1, $2, $4}' | tr ' ' '\t' > $(echo $ORGANISM)_truseq.bed
-
+		"highlighted/highlights.bed"
+	shell:
+		"bwa mem {input} -a | samtools view | cut -f3,4 | " +
+		"awk '{{print $1, $2, $2}}' > {output}"
 
 rule circos:
 	input:
-		config['light_contigs'],
-		rules.
+		rules.faidx.output,
+		config['dark_contigs'],
+		rules.highlight_alignments.output,
+		rules.assembly_alignment_filter.output
+	output:
+		"circos/circos.pdf"
 	script:
-		scripts/circos.R
+		"scripts/circos.R"
