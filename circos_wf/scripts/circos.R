@@ -3,24 +3,48 @@ require(circlize)
 output = snakemake@output[[1]]
 pdf(output, width = 8, height = 8)#, res = 300, units = 'in', type = 'cairo')
 
+dark.contigs = read.table(snakemake@input[[2]])
+colnames(dark.contigs) = c('assembly', 'condition', 'timepoint', 'contig')
+
 #rRNA
-#bed16s = tryCatch(read.table(paste(base.dir, '16s_loci/16s.bed', sep = "")), error = function(e) '')
-#bed23s = tryCatch(read.table(paste(base.dir, '16s_loci/23s.bed', sep = "")), error = function(e) '')
+highlight = read.table(snakemake@input[[3]])
+highlight.intensities = read.table(snakemake@input[[4]])
+
+#contig alignments
+contig.alignments = unlist(snakemake@input)[5:length(snakemake@input)]
+timepoint = sapply(contig.alignments, function(x) strsplit(strsplit(basename(x), '\\.')[[1]][1], '_')[[1]][2])
+condition = sapply(contig.alignments, function(x) strsplit(strsplit(basename(x), '\\.')[[1]][1], '_')[[1]][1])
+
+contig.alignments = data.frame(contig.alignments, timepoint, condition)
+
+dark.contigs = merge(dark.contigs, contig.alignments)
+
 
 #genome
 genome = read.table(snakemake@input[[1]])
 
 #aesthetic knobs
+highlight_size = 1.2
 tick.interval = 0.5e6
-rRNA_width = 1000
 track.height = 0.1
-contig.alpha = 0.5
-bed1.color = rgb(0, 0.4, 0.5, alpha = contig.alpha)#bluish
-bed2.color = rgb(0.1, 0.1, 0.1, alpha = contig.alpha)#grey
+contig.alpha = 0.3
+bed1.color = rgb(0.1, 0.1, 0.1, alpha = contig.alpha)
+bed2.color = rgb(0.5, 0.1, 0.1, alpha = contig.alpha)
+bed3.color = rgb(0, 0.4, 0.5, alpha = contig.alpha)
+bed.colors.faint = c(bed1.color, bed2.color, bed3.color)
 
-locus.alpha = 0.8
-color.16s = rgb(1, 0.5, 0, alpha = locus.alpha)
-color.23s = rgb(0, 0.5, 1, alpha = locus.alpha)
+bed1.color = rgb(0.1, 0.1, 0.1, alpha = 0.8)
+bed2.color = rgb(0.5, 0.2, 0, alpha = 0.9)
+bed3.color = rgb(0, 0.2, 0.5, alpha = 0.9)
+bed.colors.bold = c(bed1.color, bed2.color, bed3.color)
+
+
+locus.alpha = 1
+
+color.highlight = rgb(1, 0.5, 0, alpha = locus.alpha)
+color.highlight2 = rgb(0, 0.5, 1, alpha = locus.alpha)
+highlight.colors = c(color.highlight, color.highlight2)
+
 contig_height = 0.5
 min.contig.size = 25000
 contig.shave.width = 1000
@@ -36,81 +60,81 @@ genome.length = sum(cytoband[,3])
 breaks = seq(0, genome.length, by = tick.interval)
 
 #CONTIGS
-for (pair in seq(4, length(snakemake@input), by = 2)){
+for (tp in unique(timepoint)){
 
 	#contigs
-	bed1.f = snakemake@input[[pair]]
-	bed2.f = snakemake@input[[pair+1]]
+	beds = contig.alignments$contig.alignments[contig.alignments$timepoint == tp]
 
-	contigs1 = read.table(bed1.f, sep = "")
-	contigs1 = contigs1[contigs1[,3] - contigs1[,2] > min.contig.size, ]
-	contigs1[,2] = contigs1[,2] + contig.shave.width
-	contigs1[,3] = contigs1[,3] - contig.shave.width
-	contigs2 = read.table(bed2.f, sep = "")
-	contigs2 = contigs2[contigs2[,3] - contigs2[,2] > min.contig.size, ]
-	contigs2[,2] = contigs2[,2] + contig.shave.width
-	contigs2[,3] = contigs2[,3] - contig.shave.width
+	contig.list = lapply(beds, function(bed){
+		contigs1 = read.table(as.character(bed), sep = "")
+		contigs1 = contigs1[contigs1[,3] - contigs1[,2] > min.contig.size, ]
+		contigs1[,2] = contigs1[,2] + contig.shave.width
+		contigs1[,3] = contigs1[,3] - contig.shave.width
+		contigs1
+	})
 
-
-	circos.genomicTrackPlotRegion(list(contigs1, contigs2), bg.border = NA, stack = TRUE, track.height = track.height, ylim = c(0,0.5), panel.fun =function(region, value, ...) {
+	circos.genomicTrackPlotRegion(contig.list, bg.border = NA, stack = TRUE, track.height = track.height, ylim = c(0,0.5), panel.fun =function(region, value, ...) {
 		i = getI(...)
-		col = c(bed1.color, bed2.color)[i]
+		col = bed.colors.faint[i]
 		circos.genomicRect(region, value, col = col, border = "white", ytop = i + contig_height, ybottom = i - contig_height, ...)
-		if (pair == 4){
-			circos.axis(h = "top", major.at = breaks, labels = c('', paste(breaks[2:length(breaks)]/1e6, '', sep ='')), minor.ticks = 0,
-								major.tick.percentage = 0.2, labels.away.percentage = 0.05, labels.cex = 1)
+
+		#endarken darker contigs
+		to_darken = which(as.character(value[,1]) %in% as.character(dark.contigs$contig[dark.contigs$timepoint == tp]))
+		region.dark = region[to_darken,]
+		value.dark = value[to_darken,]
+
+		col = bed.colors.bold[i]
+		if (length(value.dark) > 0){
+			circos.genomicRect(region.dark, value.dark, col = col, border = "white", ytop = i + contig_height, ybottom = i - contig_height, ...)
+		}
+
+		#draw axis on the first track
+		if (tp == unique(timepoint)[1]){
+			circos.axis(h = "top", major.at = breaks, labels = c('', '', '1', '', '2', '', '3', '', '4', '', '5', '', '6'), minor.ticks = 0,
+								major.tick.percentage = 0.2, labels.away.percentage = 0.05, labels.cex = 1.5)
 		}
 	})
 }
 
-#INSERTIONS AND 16S
-if (FALSE) { #}(bed16s != '' && bed23s != ''){
+#deduplicate highlight sequence beds
+highlight_interval = 30000
+breaks = seq(1, max(highlight[,2]), highlight_interval)
+highlight[,2] = breaks[cut(highlight[,2], breaks, labels = FALSE)]
+highlight[,3] = highlight[,2] + 1000
+highlight = unique(highlight)
 
-	#deduplicate beds
-	if (nrow(bed16s) > 1){
-		bed16s = bed16s[order(bed16s[,2]),]
-		bed16s = bed16s[order(bed16s[,1]),]
-		bad_idx = c(0)
-		for (i in 1:(nrow(bed16s)-1)){
-			if (bed16s[i,1] == bed16s[i+1,1] & bed16s[i,3] > bed16s[i+1,2] - 10000){
-				bad_idx = c(bad_idx, i)
-			}
-		}
-		bad_idx = bad_idx[-1]
-		if (length(bad_idx) > 0){
-			bed16s = bed16s[-c(bad_idx),]
-		}
-	}
+highlight = highlight[order(highlight[,2]),]
+highlight = cbind(highlight[,c(1,2)], highlight[,4])
 
-	if (nrow(bed16s) > 1){
-		bed23s = bed23s[order(bed23s[,2]),]
-		bed23s = bed23s[order(bed23s[,1]),]
-		bad_idx = c(0)
-		for (i in 1:(nrow(bed23s)-1)){
-			if (bed23s[i,1] == bed23s[i+1,1] & bed23s[i,3] > bed23s[i+1,2] - 10000){
-				bad_idx = c(bad_idx, i)
-			}
-		}
-		bad_idx = bad_idx[-1]
-		if (length(bad_idx) > 0){
-			bed23s = bed23s[-c(bad_idx),]
-		}
-	}
+#color the highlights by the first ';' delimited portion of their original sequence names.
+highlight$type = sapply(highlight[,3], function(x) strsplit(as.character(x), ';')[[1]][1])
+colnames(highlight) = c('Ref.contig', 'Coord', 'Highlight.seq', 'Group.member')
+colnames(highlight.intensities) = c('Highlight.seq', unique(sort(timepoint)))
 
-	bed16s = bed16s[order(bed16s[,2]),]
-	bed16s = cbind(bed16s[,c(1,2)], bed16s[,2] + rRNA_width, color.16s)
+#HIGHLIGHTED SEQUENCES
+for (tp in sort(unique(timepoint))){
+	highlight.merge = merge(highlight, highlight.intensities)
+	highlight.merge = highlight.merge[,c(-1)]
+	highlight.merge = highlight.merge[c(1,2,which(colnames(highlight.merge) == tp),3)]
 
-	bed23s = bed23s[order(bed23s[,2]),]
-	bed23s = cbind(bed23s[,c(1,2)], bed23s[,2] + rRNA_width, color.23s)
+	highlight.merge$Group.member = factor(highlight.merge$Group.member)
+	levels(highlight.merge$Group.member) = c(TRUE, FALSE)
 
-	bedlist = list(bed16s, bed23s)
-
+	bedlist = list(
+		highlight.merge[highlight.merge$Group.member == TRUE,],
+		highlight.merge[highlight.merge$Group.member == FALSE,]
+	)
 
 	circos.genomicTrackPlotRegion(bedlist, stack = FALSE, bg.border = NA, track.height = track.height, ylim = c(0,1), panel.fun =function(region, value, ...) {
 		i = getI(...)
-		color = c(color.16s, color.23s)[i]
-		circos.genomicRect(region, value, col = color, alpha = locus.alpha, border = color, ytop = 2.3, ybottom = 1.35, ...)
-		circos.points(region[,1], rep((i/6) + 0.75, nrow(region)), pch = 16, col = color, cex = 1.2)
+		color = highlight.colors[i]
+
+		data = region[region[,2] >= 0,]
+		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 1, col = color, cex = highlight_size)
+		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 16, col = color, cex = (1-data[,2]) * highlight_size)
+
+		no_data = region[region[,2] < 0,]
+		circos.points(no_data[,1], rep(length(unique(timepoint)) + 2.5, nrow(no_data)), pch = 4, col = color, cex = highlight_size)
 	})
 }
 

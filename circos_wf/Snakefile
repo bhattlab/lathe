@@ -2,10 +2,10 @@
 
 import os
 
-#localrules: faidx, assembly_alignment, assembly_alignment_filter, highlight_alignments, circos
+localrules: faidx, stage_assemblies, assembly_alignment_filter, bwa_index, highlight_alignments, circos
 
 #parse the provided assemblies
-asm_cond_tp = {}
+condtp_asm = {}
 
 with open(config['assemblies']) as asmf:
 	basedir = os.path.dirname(config['assemblies'])
@@ -17,18 +17,18 @@ with open(config['assemblies']) as asmf:
 		asm = os.path.join(basedir, s[0])
 		cond = s[1]
 		tp = s[2].strip()
+		condtp = "_".join([cond, tp])
+		condtp_asm[condtp] = asm
 
-		asm_cond_tp[asm] = {}
-		asm_cond_tp[asm][cond] = tp
-
-aligned_filenames = ['_'.join([c, asm_cond_tp[asm][c]]) for asm in asm_cond_tp for c in asm_cond_tp[asm]]
-assembly_files = [k for k in asm_cond_tp]
+aligned_filenames = [c for c in condtp_asm]
+assembly_files = [condtp_asm[k] for k in condtp_asm]
 
 rule targets:
 	input:
 		config['reference'],
 		config['dark_contigs'],
 		config['highlight_sequences'],
+		config['highlight_intensities'],
 		config['assemblies']
 
 rule faidx:
@@ -39,30 +39,37 @@ rule faidx:
 	shell:
 		"samtools faidx {input}"
 
+#set up a symlink for each input assembly encoded with the timepoint and condition
+rule stage_assemblies:
+	input:
+		#When this file is parsed, the wildcard value is unknown. So in order to index into this dictionary,
+		#a lambda function delays retrieval of the value until job dependencies (and wildcard values)
+		#are resolved.
+		lambda wildcards: condtp_asm[wildcards.f]
+	output:
+		"assemblies/{f}.fa"
+	shell:
+		"ln -s ../{input} {output}"
+
 #Assembly alignments to reference
 rule assembly_alignment:
 	input:
 		config['reference'],
-		assembly_files
+		rules.stage_assemblies.output
 	output:
-		expand("aligned/{fs}.coords", fs = aligned_filenames)
-#		temp("out.delta")
-	run:
-		for asm in asm_cond_tp:
-			for c in asm_cond_tp[asm]:
-				t = asm_cond_tp[asm][c]
-				shell("nucmer {input[0]} {asm} -p aligned/{c}_{t}; \
-					delta-filter -1 aligned/{c}_{t}.delta > aligned/{c}_{t}.delta.filt; \
-					show-coords aligned/{c}_{t}.delta.filt -T > aligned/{c}_{t}.coords; \
-				")
+		"aligned/{f}.coords"
+	shell:
+		"nucmer {input[0]} assemblies/{wildcards.f}.fa -p aligned/{wildcards.f}; " +
+			"delta-filter -1 aligned/{wildcards.f}.delta > aligned/{wildcards.f}.delta.filt; " +
+			"show-coords aligned/{wildcards.f}.delta.filt -T > aligned/{wildcards.f}.coords; "
 
 rule assembly_alignment_filter:
 	input:
 		rules.assembly_alignment.output
 	output:
-		expand("aligned/{fs}.bed", fs = aligned_filenames)
+		"aligned/{f}.bed"
 	params:
-		gap_width = "5000",
+		gap_width = "1000",
 	script:
 		"scripts/coord_filter.py"
 
@@ -93,15 +100,16 @@ rule highlight_alignments:
 	output:
 		"highlighted/highlights.bed"
 	shell:
-		"bwa mem {input} -a | samtools view | cut -f3,4 | " +
-		"awk '{{print $1, $2, $2}}' > {output}"
+		"bwa mem {input} -a > highlighted/highlights.sam;" +
+		"samtools view highlighted/highlights.sam | grep NM:i:0 | grep XS:i:0| cut -f1,3,4 | awk '{{print $2, $3, $3 + 1000, $1}}' > {output}"
 
 rule circos:
 	input:
 		rules.faidx.output,
 		config['dark_contigs'],
 		rules.highlight_alignments.output,
-		rules.assembly_alignment_filter.output
+		config['highlight_intensities'],
+		expand("aligned/{f}.bed", f = aligned_filenames)
 	output:
 		"circos/circos.pdf"
 	script:
