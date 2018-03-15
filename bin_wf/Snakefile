@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 localrules: bwa_index_setup, postprocess_raw, postprocess_final
-
+configfile: "config.json"
 rule targets:
 	input:
 		config['reads1'],
