@@ -73,7 +73,6 @@ rule assembly_alignment_filter:
 	script:
 		"scripts/coord_filter.py"
 
-
 rule bwa_index:
 	input:
 		config['reference']
@@ -101,7 +100,7 @@ rule highlight_alignments:
 		"highlighted/highlights.bed"
 	shell:
 		"bwa mem {input} -a > highlighted/highlights.sam;" +
-		"samtools view highlighted/highlights.sam | grep NM:i:0 | grep XS:i:0| cut -f1,3,4 | awk '{{print $2, $3, $3 + 1000, $1}}' > {output}"
+		"samtools view highlighted/highlights.sam | grep NM:i:0 | grep XS:i:0| cut -f1,3,4 | sort -u -k1,1 | awk '{{print $2, $3, $3 + 1000, $1}}' > {output}"
 
 rule circos:
 	input:

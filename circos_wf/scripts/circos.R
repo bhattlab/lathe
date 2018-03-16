@@ -46,7 +46,7 @@ color.highlight2 = rgb(0, 0.5, 1, alpha = locus.alpha)
 highlight.colors = c(color.highlight, color.highlight2)
 
 contig_height = 0.5
-min.contig.size = 25000
+min.contig.size = 5000
 contig.shave.width = 1000
 
 #init
@@ -97,11 +97,11 @@ for (tp in unique(timepoint)){
 }
 
 #deduplicate highlight sequence beds
-highlight_interval = 30000
-breaks = seq(1, max(highlight[,2]), highlight_interval)
-highlight[,2] = breaks[cut(highlight[,2], breaks, labels = FALSE)]
-highlight[,3] = highlight[,2] + 1000
-highlight = unique(highlight)
+#highlight_interval = 30000
+#breaks = seq(1, max(highlight[,2]), highlight_interval)
+#highlight[,2] = breaks[cut(highlight[,2], breaks, labels = FALSE)+1]
+#highlight[,3] = highlight[,2] + 1000
+#highlight = unique(highlight)
 
 highlight = highlight[order(highlight[,2]),]
 highlight = cbind(highlight[,c(1,2)], highlight[,4])
