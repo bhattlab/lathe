@@ -8,7 +8,7 @@ import os
 #    output: 6753_d/classify/bin_species_calls.tsv
 
 krakf = snakemake.input[0]
-binfaifs = os.listdir(os.path.dirname(snakemake.input[1]))
+binfaifs = snakemake.input[1:]
 binfolder = os.path.dirname(snakemake.input[1])
 outf = snakemake.output[0]
 
