@@ -4,7 +4,7 @@ localrules: bwa_index_setup, postprocess_raw, postprocess_final
 
 samp = config['sample']
 
-rule targets:
+rule all:
 	input:
 		config['reads1'],
 		config['reads2'],
@@ -84,15 +84,16 @@ rule metabat:
 		time=24
 	threads: 24
 	shell:
-		"~/moss/tools/classification_and_binning/metabat/runMetaBat.sh --seed 1 -t {threads} --unbinned " \
-		+ "{input};" +
-		" mv {samp}.fa.metabat-bins--unbinned/* {samp}/bins/; \
-		rmdir {samp}.fa.metabat-bins--unbinned/; \
-		mv {samp}.fa.depth.txt {samp}/"
+		"cp -r bins {samp}/"
+		#"~/moss/tools/classification_and_binning/metabat/runMetaBat.sh --seed 1 -t {threads} --unbinned " \
+		#+ "{input};" +
+		#" mv {samp}.fa.metabat-bins--unbinned/* {samp}/bins/; \
+		#rmdir {samp}.fa.metabat-bins--unbinned/; \
+		#mv {samp}.fa.depth.txt {samp}/"
 
 rule checkm:
 	input:
-		dynamic(rules.metabat.output)
+		rules.metabat.output
 	output:
 		"{samp}/checkm/checkm.tsv"
 	log:
@@ -106,7 +107,7 @@ rule checkm:
 
 rule aragorn:
 	input:
-		dynamic(rules.metabat.output) #the number of bins is unknown prior to execution, hence 'dynamic'
+		"{samp}/bins/{bin}.fa"
 	output:
 		"{samp}/rna/trna/{bin}.fa.txt"
 	log:
@@ -115,11 +116,11 @@ rule aragorn:
 		mem=8,
 		time=1
 	shell:
-		"aragorn -t {input} -o {output}"
+		"module add aragorn; aragorn -t {input} -o {output}"
 
 rule barrnap:
 	input:
-		dynamic(rules.metabat.output) #the number of bins is unknown prior to execution, hence 'dynamic'
+		"{samp}/bins/{bin}.fa"
 	output:
 		"{samp}/rna/rrna/{bin}.fa.txt"
 	log:
@@ -132,7 +133,7 @@ rule barrnap:
 
 rule quast:
 	input:
-		dynamic(rules.metabat.output)
+		"{samp}/bins/{bin}.fa"
 	output:
 		"{samp}/quast/{bin}.fa"
 	log:
@@ -146,7 +147,7 @@ rule quast:
 
 rule prokka:
 	input:
-		dynamic(rules.metabat.output)
+		"{samp}/bins/{bin}.fa"
 	output:
 		"{samp}/prokka/{bin}.fa/{samp}_{bin}.fa.gff"
 	log:
@@ -155,8 +156,22 @@ rule prokka:
 		mem=32,
 		time=1
 	shell:
-		"module add prokka; prokka {samp}/bins/{input}.fa --outdir {samp}/prokka/{input}.fa " +
+		"module add prokka; prokka {input} --outdir {samp}/prokka/{input}.fa " +
 		"--prefix {samp}_foo --centre X --compliant --force "
+
+rule fasta_index:
+	input:
+		"{samp}/bins/{bin}.fa"
+	output:
+		"{samp}/bins/{bin}.fa.fai"
+	log:
+		"{samp}/logs/faidx.log"
+	resources:
+		mem=8,
+		time=1
+	threads: 24
+	shell:
+		"samtools faidx {input}"
 
 rule kraken:
 		input:
@@ -187,20 +202,6 @@ rule kraken_translate:
 		"kraken-translate {input} --mpa-format " +
 		"--db {krak} ".format(krak=config['krakendb']) +
 		"> {output}"
-
-rule fasta_index:
-	input:
-		dynamic("{samp}/bins/{bin}.fa")
-	output:
-		"{samp}/bins/{bin}.fa.fai"
-	log:
-		"{samp}/logs/faidx.log"
-	resources:
-		mem=8,
-		time=1
-	threads: 24
-	shell:
-		"samtools faidx {input}"
 
 rule label_bins:
 	input:
