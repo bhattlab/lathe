@@ -2,6 +2,7 @@
 
 localrules: bwa_index_setup, postprocess_raw, postprocess_final
 
+
 samp = config['sample'] #is this necessary?
 
 rule all:
@@ -92,7 +93,7 @@ rule metabat:
 
 rule checkm:
 	input:
-		rules.metabat.output
+		dynamic(rules.metabat.output)
 	output:
 		"{samp}/checkm/checkm.tsv"
 	log:
@@ -106,6 +107,7 @@ rule checkm:
 
 rule aragorn:
 	input:
+
 		"{samp}/bins/{bin}.fa"
 	output:
 		"{samp}/rna/trna/{bin}.fa.txt"
@@ -120,6 +122,13 @@ rule aragorn:
 rule barrnap:
 	input:
 		"{samp}/bins/{bin}.fa"
+=======
+		"aragorn -t {input} -o {output}"
+
+rule barrnap:
+	input:
+		dynamic(rules.metabat.output) #the number of bins is unknown prior to execution, hence 'dynamic'
+>>>>>>> 9e52064117d119132149e6fa4329f8aa67806d5c
 	output:
 		"{samp}/rna/rrna/{bin}.fa.txt"
 	log:
