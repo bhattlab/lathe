@@ -2,7 +2,7 @@
 
 localrules: bwa_index_setup, postprocess_raw, postprocess_final
 
-samp = config['sample']
+samp = config['sample'] #is this necessary?
 
 rule all:
 	input:
@@ -84,12 +84,11 @@ rule metabat:
 		time=24
 	threads: 24
 	shell:
-		"cp -r bins {samp}/"
-		#"~/moss/tools/classification_and_binning/metabat/runMetaBat.sh --seed 1 -t {threads} --unbinned " \
-		#+ "{input};" +
-		#" mv {samp}.fa.metabat-bins--unbinned/* {samp}/bins/; \
-		#rmdir {samp}.fa.metabat-bins--unbinned/; \
-		#mv {samp}.fa.depth.txt {samp}/"
+		"~/moss/tools/classification_and_binning/metabat/runMetaBat.sh --seed 1 -t {threads} --unbinned " \
+		+ "{input};" +
+		" mv {samp}.fa.metabat-bins--unbinned/* {samp}/bins/; \
+		rmdir {samp}.fa.metabat-bins--unbinned/; \
+		mv {samp}.fa.depth.txt {samp}/"
 
 rule checkm:
 	input:
