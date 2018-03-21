@@ -2,14 +2,14 @@
 
 localrules: bwa_index_setup, postprocess_raw, postprocess_final
 
-
-samp = config['sample'] #is this necessary?
+samp = config['sample']
 
 rule all:
 	input:
 		config['reads1'],
 		config['reads2'],
 		config['assembly']
+
 
 rule bwa_index_setup:
 	input:
@@ -122,13 +122,6 @@ rule aragorn:
 rule barrnap:
 	input:
 		"{samp}/bins/{bin}.fa"
-=======
-		"aragorn -t {input} -o {output}"
-
-rule barrnap:
-	input:
-		dynamic(rules.metabat.output) #the number of bins is unknown prior to execution, hence 'dynamic'
->>>>>>> 9e52064117d119132149e6fa4329f8aa67806d5c
 	output:
 		"{samp}/rna/rrna/{bin}.fa.txt"
 	log:
@@ -166,6 +159,62 @@ rule prokka:
 	shell:
 		"module add prokka; prokka {input} --outdir {samp}/prokka/{input}.fa " +
 		"--prefix {samp}_foo --centre X --compliant --force "
+
+rule bam_idx:
+	input:
+		"{samp}/{samp}.bam"
+	output:
+		"{samp}/{samp}.bam.bai"
+	log:
+		"{samp}/logs/bamidx.log"
+	resources:
+		mem=2,
+		time=2
+	shell:
+		"samtools index {input}"
+
+rule bam_idxstats:
+	input:
+		"{samp}/{samp}.bam",
+		"{samp}/{samp}.bam.bai"
+	output:
+		"{samp}/{samp}.bam.bai.tsv"
+	log:
+		"{samp}/logs/bamidx.log"
+	resources:
+		mem=2,
+		time=2
+	shell:
+		"samtools idxstats {input} > {output}"
+
+rule bin_idxstats:
+	input:
+		"{samp}/bins/{bin}.fa",
+		"{samp}/{samp}.bam.bai.tsv"
+	output:
+		"{samp}/coverage/raw/{bin}.tsv"
+	log:
+		"{samp}/logs/coverage.log"
+	resources:
+		mem=2,
+		time=1
+	shell:
+		"grep '>' {input[0]} | tr -d '>' | xargs -I foo -n 1 grep -P 'foo\t' {input[1]} > {output}"
+
+rule bin_coverage:
+	input:
+		rules.bin_idxstats.output
+	output:
+		"{samp}/coverage/{bin}.txt"
+	log:
+		"{samp}/logs/coverage.log"
+	resources:
+		mem=2,
+		time=1
+	params:
+		read_length = config['read_length']
+	script:
+		"scripts/bin_coverage.py"
 
 rule fasta_index:
 	input:
@@ -229,6 +278,7 @@ rule postprocess_raw:
 		rules.checkm.output,
 		dynamic(rules.aragorn.output),
 		dynamic(rules.barrnap.output),
+		dynamic(rules.bin_coverage.output),
 		rules.label_bins.output
 	output:
 		"{samp}/final/prokka.tmp",
@@ -236,17 +286,20 @@ rule postprocess_raw:
 		"{samp}/final/checkm.tmp",
 		"{samp}/final/trna.tmp",
 		"{samp}/final/rrna.tmp",
-		"{samp}/final/classify.tmp"
+		"{samp}/final/classify.tmp",
+		"{samp}/final/coverage.tmp",
 	log:
 		"{samp}/logs/postprocess.log"
 	resources:
 		mem=2,
 		time=1
-	shell:
+	shell: #TODO: tuck this away into a shell script.
+		"(echo 'Sample Bin Coverage' | tr ' ' '\t'; " +
+			"cat {samp}/coverage/*.txt) > {samp}/final/coverage.tmp; " +
 		"(echo 'Sample Bin Genes' | tr ' ' '\t'; \
 			find {samp}/prokka/ -name '*.gff' | xargs grep -c CDS | cut -f4 -d '/' | sed 's/.fa.gff:/\t/g' | sed 's/{samp}_/{samp}\t/g' | sort -k2,2g) > {samp}/final/prokka.tmp; " + \
 		"find {samp}/quast/ -name 'transposed_report.tsv' | xargs cat | sort -u | sed 's/^bin/{samp}\tbin/g' | sed 's/^Assembly/Sample\tBin/g' > {samp}/final/quast.tmp; " + \
-		"cat {rules.checkm.output} " + " | sed 's/^bin/{samp}\tbin/g' | sed 's/^Bin Id/Sample\tBin/g' > {samp}/final/checkm.tmp; " + \
+		"cat {samp}/checkm/checkm.tsv " + " | sed 's/^bin/{samp}\tbin/g' | sed 's/^Bin Id/Sample\tBin/g' > {samp}/final/checkm.tmp; " + \
 		"(echo 'Sample Bin tRNA' | tr ' ' '\t'; \
 			grep Total {samp}/rna/trna/* | sed 's/\/rna\/trna\//\t/g' | sed 's/.fa.txt:Total tRNA genes = /\t/g') > {samp}/final/trna.tmp; " + \
 		"(echo 'Sample Bin rna.16S rna.23S rna.5S' | tr ' ' '\t'; \
@@ -255,8 +308,8 @@ rule postprocess_raw:
 			<(grep -c 23S {samp}/rna/rrna/* | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f3) \
 			<(grep -c 5S {samp}/rna/rrna/* | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f3) \
 		) > {samp}/final/rrna.tmp; " + \
-		"(echo 'Sample Bin Majority.Class Majority.Fraction Size.Mb Final.Class' | tr ' ' '\t'; \
-			cat {rules.label_bins.output}" + " | sed 's/\.fa//g' | sed 's/^/{samp}\t/g') > {samp}/final/classify.tmp;"
+		"(echo 'Sample Bin Majority.Class Majority.Fraction Size.Mb Final.Class' | tr ' ' '\t'; " +
+			"cat {samp}/classify/bin_species_calls.tsv" + " | sed 's/\.fa//g' | sed 's/^/{samp}\t/g') > {samp}/final/classify.tmp;"
 
 rule postprocess_final:
 	input:
@@ -266,4 +319,4 @@ rule postprocess_final:
 	log:
 		"{samp}/logs/postprocess.log"
 	script:
-		"join_final_tables.R"
+		"scripts/join_final_tables.R"
