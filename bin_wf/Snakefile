@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-localrules: bwa_index_setup, postprocess_raw, postprocess_final
+localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins
 
 samp = config['sample']
 
@@ -8,8 +8,8 @@ rule all:
 	input:
 		config['reads1'],
 		config['reads2'],
-		config['assembly']
-
+		config['assembly'],
+		config['krakendb']
 
 rule bwa_index_setup:
 	input:
@@ -107,7 +107,6 @@ rule checkm:
 
 rule aragorn:
 	input:
-
 		"{samp}/bins/{bin}.fa"
 	output:
 		"{samp}/rna/trna/{bin}.fa.txt"
@@ -144,7 +143,7 @@ rule quast:
 		time=1
 	shell:
 		"quast.py -o {output} {input} " +
-		"--contig-thresholds 0,10000,50000,100000,250000,500000,1000000,2000000,3000000 --fast '"
+		"--contig-thresholds 0,10000,50000,100000,250000,500000,1000000,2000000,3000000 --fast "
 
 rule prokka:
 	input:
@@ -155,10 +154,11 @@ rule prokka:
 		"{samp}/logs/prokka.log"
 	resources:
 		mem=32,
-		time=1
+		time=1,
+	threads: 32
 	shell:
-		"module add prokka; prokka {input} --outdir {samp}/prokka/{input}.fa " +
-		"--prefix {samp}_foo --centre X --compliant --force "
+		"module add prokka; prokka {input} --outdir {samp}/prokka/{wildcards.bin}.fa " +
+		"--prefix {samp}_{wildcards.bin}.fa --centre X --compliant --force --cpus {threads}"
 
 rule bam_idx:
 	input:
@@ -298,8 +298,8 @@ rule postprocess_raw:
 			"cat {samp}/coverage/*.txt) > {samp}/final/coverage.tmp; " +
 		"(echo 'Sample Bin Genes' | tr ' ' '\t'; \
 			find {samp}/prokka/ -name '*.gff' | xargs grep -c CDS | cut -f4 -d '/' | sed 's/.fa.gff:/\t/g' | sed 's/{samp}_/{samp}\t/g' | sort -k2,2g) > {samp}/final/prokka.tmp; " + \
-		"find {samp}/quast/ -name 'transposed_report.tsv' | xargs cat | sort -u | sed 's/^bin/{samp}\tbin/g' | sed 's/^Assembly/Sample\tBin/g' > {samp}/final/quast.tmp; " + \
-		"cat {samp}/checkm/checkm.tsv " + " | sed 's/^bin/{samp}\tbin/g' | sed 's/^Bin Id/Sample\tBin/g' > {samp}/final/checkm.tmp; " + \
+		"find {samp}/quast/ -name 'transposed_report.tsv' | xargs cat | sort -u | sed 's/^\(b..\)/{samp}\t\\1/g' | sed 's/^Assembly/Sample\tBin/g' > {samp}/final/quast.tmp; " + \
+		"cat {samp}/checkm/checkm.tsv " + " | sed 's/^\(b..\)/{samp}\t\\1/g' | sed 's/^Bin Id/Sample\tBin/g' > {samp}/final/checkm.tmp; " + \
 		"(echo 'Sample Bin tRNA' | tr ' ' '\t'; \
 			grep Total {samp}/rna/trna/* | sed 's/\/rna\/trna\//\t/g' | sed 's/.fa.txt:Total tRNA genes = /\t/g') > {samp}/final/trna.tmp; " + \
 		"(echo 'Sample Bin rna.16S rna.23S rna.5S' | tr ' ' '\t'; \

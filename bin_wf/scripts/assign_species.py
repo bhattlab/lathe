@@ -24,7 +24,7 @@ with open(krakf, 'r') as krak:
 				continue
 			species_votes = {}
 
-			with open(os.path.join(binfolder, binfaif), 'r') as binfai:
+			with open(binfaif, 'r') as binfai:
 				for l in krak.readlines():
 					s = l.rstrip().split("\t")
 					tig_species[s[0]] = '_'.join(s[1].split('|')[-1].split('_')[2:4])

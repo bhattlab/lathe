@@ -9,5 +9,9 @@
   "bwa_align" :
     {
         "partition" : "nih_s10"
+    },
+  "checkm" :
+    {
+        "partition" : "nih_s10"
     }
 }
