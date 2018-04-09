@@ -1,6 +1,6 @@
 import os
 
-localrules: stage_is_fasta, stage_assembly_fasta, bwa_index_is_fasta,peak_shift
+localrules: stage_is_fasta, stage_assembly_fasta, bwa_index_is_fasta, is_location_bed
 
 sample = config['samplename']
 readsdir = os.path.dirname(config['reads1'])
@@ -11,7 +11,7 @@ rule all:
 		config['reads2'],
 		config['insertion_fasta'],
 		config['assembly_fasta'],
-		"{sample}/is_paired_to_assembly.bam".format(sample = sample)
+		"{sample}/is_locations_flanks.fa".format(sample = sample)
 
 #set up a symlink for each input fasta
 rule stage_is_fasta:
@@ -97,18 +97,25 @@ rule align_paired_reads_to_assembly:
 	shell:
 		"bwa mem {params.s}/assembly/assembly.fa {params.s}/is_paired_reads.fq " +
 			"| samtools sort - > {output[0]}; samtools index {output[0]}"
-'''
-rule peak_shift:
-	input: rules.align_paired_reads_to_assembly.output
-	output:
-		"{sample}/peakcalling/cross_correlations.tsv",
-		"{sample}/peakcalling/offset.txt",
-		"{sample}/peakcalling/offset_over1k.txt",
-		"{sample}/peakcalling/read_shifted.bam",
-		"{sample}/peakcalling/read_shifted_over1k.bam",
-		"{sample}/peakcalling/read_shifted_sorted.bam",
-		"{sample}/peakcalling/read_shifted_over1k_sorted.bam",
-		"{sample}/peakcalling/read_shifted_sorted.bam.bai",
-		"{sample}/peakcalling/read_shifted_over1k_sorted.bam.bai"
-	script: "scripts/call_insertion_sites.py"
-'''
+
+rule is_location_bed:
+	params:
+		threshold = 10,
+		interval = 2000
+	input: "{sample}/is_paired_to_assembly.bam"
+	output: "{sample}/is_locations_abundances.bed"
+	shell:
+		"""
+		samtools mpileup {input} | cut -f1,2,4 | awk '{{if ($3 > {params.threshold}) print $0}}' |
+		awk '{print $1, $2, $2 + {params.interval}, $3}' | tr ' ' '\t' | bedtools merge -c 4 -o max > {output}
+		"""
+
+rule is_flanks:
+	input:
+		rules.is_location_bed.output,
+		rules.stage_assembly_fasta.output
+	output: "{sample}/is_locations_flanks.fa"
+	shell:
+		"cat {input[0]} | " +
+		"awk '{if ($2 > 1000) {print $1, \":\", $2-1000, \"-\", $3+1000} else {print $1, \":\", $2, \"-\", $3+1000}}' |" +
+		"tr -d ' ' | xargs -n 1 -I foo samtools faidx {input[1]} foo > {output}"
