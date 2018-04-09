@@ -1,6 +1,7 @@
 # Circos Assembly Comparison Visualization Workflow
 
 ### Inputs
+# Alter config.yaml to provide the following:
 * **Reference**: Sequence against which all others will be aligned. Forms the "backbone" of the circos plot. Multi-fasta.
 
 * **Dark contigs**: contigs which will be shaded darker in the final plot. Leave empty for all dark. Two tab-delimited columns: assembly file (matches the first column of Assemblies below), contig name.

@@ -1,0 +1,5 @@
+assembly:assembly_links/6753_foo/contigs.fasta,
+sample:sr_6753_foo,
+reads1:read_links/6753_foo_1.fq.gz,
+reads2:read_links/6753_foo_2.fq.gz,
+krakendb:/srv/gsfs0/projects/bhatt/bhattlab/data/program_indices/kraken/kraken_custom/
