@@ -1,4 +1,4 @@
-# workflows
+# Metagenomics Workflows
 Workflows for metagenomic sequence data processing and analysis.  Further documentation found in each workflow folder.
 
 ## bin_label_and_evaluate
