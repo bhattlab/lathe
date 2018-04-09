@@ -1,0 +1,114 @@
+import os
+
+localrules: stage_is_fasta, stage_assembly_fasta, bwa_index_is_fasta,peak_shift
+
+sample = config['samplename']
+readsdir = os.path.dirname(config['reads1'])
+
+rule all:
+	input:
+		config['reads1'],
+		config['reads2'],
+		config['insertion_fasta'],
+		config['assembly_fasta'],
+		"{sample}/is_paired_to_assembly.bam".format(sample = sample)
+
+#set up a symlink for each input fasta
+rule stage_is_fasta:
+	input:
+		config['insertion_fasta']
+	output:
+		"{s}/insertion_sequence/insertion_sequence.fa".format(s = sample),
+	shell:
+		"ln -s ../../{input} {output}"
+
+rule bwa_index_is_fasta:
+	input:
+		"{sample}/insertion_sequence/insertion_sequence.fa",
+	output:
+		"{sample}/insertion_sequence/insertion_sequence.fa.amb",
+		"{sample}/insertion_sequence/insertion_sequence.fa.ann",
+		"{sample}/insertion_sequence/insertion_sequence.fa.bwt",
+		"{sample}/insertion_sequence/insertion_sequence.fa.pac",
+		"{sample}/insertion_sequence/insertion_sequence.fa.sa"
+	threads: 1
+	shell:
+		"bwa index {input}"
+
+rule stage_assembly_fasta:
+	input:
+		config['assembly_fasta']
+	output:
+		"{sample}/assembly/assembly.fa",
+	shell:
+		"ln -s ../../{input} {output}"
+
+rule bwa_index_assembly_fasta:
+	input:
+		"{sample}/assembly/assembly.fa",
+	output:
+		"{sample}/assembly/assembly.fa.amb",
+		"{sample}/assembly/assembly.fa.ann",
+		"{sample}/assembly/assembly.fa.bwt",
+		"{sample}/assembly/assembly.fa.pac",
+		"{sample}/assembly/assembly.fa.sa"
+	threads: 1
+	shell:
+		"bwa index {input}"
+
+
+rule align_to_is:
+	input:
+		rules.stage_is_fasta.output,
+		rules.bwa_index_is_fasta.output,
+		config['reads1'],
+		config['reads2']
+	output:
+		"{sample}/reads_to_is.bam"
+	threads: 32
+	resources:
+		mem=24,
+		time=6
+	shell:
+		"bwa mem -t {{threads}} {{sample}}/insertion_sequence/insertion_sequence.fa {r1} {r2} | samtools sort - --threads {{threads}} > {{output}}".format(
+			r1 = config['reads1'],
+			r2 = config['reads2'])
+
+rule filter_is_paired_reads:
+	input: rules.align_to_is.output
+	output:
+		"{sample}/is_paired_reads.fq",
+	shell:
+		"samtools view {input} -h -f4 -F8 | samtools fastq - > {output}"
+
+rule align_paired_reads_to_assembly:
+	params:
+		s = sample
+	input:
+		rules.stage_assembly_fasta.output,
+		rules.bwa_index_assembly_fasta.output,
+		rules.filter_is_paired_reads.output
+	output:
+		"{sample}/is_paired_to_assembly.bam",
+		"{sample}/is_paired_to_assembly.bam.bai"
+	resources:
+		mem=8,
+		time=3
+	shell:
+		"bwa mem {params.s}/assembly/assembly.fa {params.s}/is_paired_reads.fq " +
+			"| samtools sort - > {output[0]}; samtools index {output[0]}"
+'''
+rule peak_shift:
+	input: rules.align_paired_reads_to_assembly.output
+	output:
+		"{sample}/peakcalling/cross_correlations.tsv",
+		"{sample}/peakcalling/offset.txt",
+		"{sample}/peakcalling/offset_over1k.txt",
+		"{sample}/peakcalling/read_shifted.bam",
+		"{sample}/peakcalling/read_shifted_over1k.bam",
+		"{sample}/peakcalling/read_shifted_sorted.bam",
+		"{sample}/peakcalling/read_shifted_over1k_sorted.bam",
+		"{sample}/peakcalling/read_shifted_sorted.bam.bai",
+		"{sample}/peakcalling/read_shifted_over1k_sorted.bam.bai"
+	script: "scripts/call_insertion_sites.py"
+'''

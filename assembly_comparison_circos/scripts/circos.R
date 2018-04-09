@@ -28,25 +28,25 @@ highlight_size = 1.2
 tick.interval = 0.5e6
 track.height = 0.1
 contig.alpha = 0.3
-bed1.color = rgb(0.1, 0.1, 0.1, alpha = contig.alpha)
-bed2.color = rgb(0.5, 0.1, 0.1, alpha = contig.alpha)
-bed3.color = rgb(0, 0.4, 0.5, alpha = contig.alpha)
+bed1.color = adjustcolor("#409159", alpha = contig.alpha)
+bed2.color = adjustcolor("#E69F00", alpha = contig.alpha)
+bed3.color = adjustcolor("#5AC6E2", alpha = contig.alpha)
 bed.colors.faint = c(bed1.color, bed2.color, bed3.color)
 
-bed1.color = rgb(0.1, 0.1, 0.1, alpha = 0.8)
-bed2.color = rgb(0.5, 0.2, 0, alpha = 0.9)
-bed3.color = rgb(0, 0.2, 0.5, alpha = 0.9)
+bed1.color = adjustcolor("#409159", alpha = 0.8)
+bed2.color = adjustcolor("#E69F00", alpha = 0.9)
+bed3.color = adjustcolor("#5AC6E2", alpha = 0.9)
 bed.colors.bold = c(bed1.color, bed2.color, bed3.color)
 
 
 locus.alpha = 1
 
-color.highlight = rgb(1, 0.5, 0, alpha = locus.alpha)
+color.highlight = rgb(1, 0.3, 0.1, alpha = locus.alpha)
 color.highlight2 = rgb(0, 0.5, 1, alpha = locus.alpha)
 highlight.colors = c(color.highlight, color.highlight2)
 
 contig_height = 0.5
-min.contig.size = 5000
+min.contig.size = 0
 contig.shave.width = 1000
 
 #init
@@ -110,6 +110,7 @@ highlight = cbind(highlight[,c(1,2)], highlight[,4])
 highlight$type = sapply(highlight[,3], function(x) strsplit(as.character(x), ';')[[1]][1])
 colnames(highlight) = c('Ref.contig', 'Coord', 'Highlight.seq', 'Group.member')
 colnames(highlight.intensities) = c('Highlight.seq', unique(sort(timepoint)))
+highlight.intensities[,2:5][highlight.intensities[,2:5]>1] = 1
 
 #HIGHLIGHTED SEQUENCES
 for (tp in sort(unique(timepoint))){
@@ -131,7 +132,7 @@ for (tp in sort(unique(timepoint))){
 
 		data = region[region[,2] >= 0,]
 		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 1, col = color, cex = highlight_size)
-		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 16, col = color, cex = (1-data[,2]) * highlight_size)
+		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 16, col = color, cex = (data[,2]) * highlight_size)
 
 		no_data = region[region[,2] < 0,]
 		circos.points(no_data[,1], rep(length(unique(timepoint)) + 2.5, nrow(no_data)), pch = 4, col = color, cex = highlight_size)
