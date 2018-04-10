@@ -41,11 +41,7 @@ rule bwa_index:
 		mem=8,
 		time=2
 	threads: 1
-	params:
-		prefix="{samp}/idx/{samp}",
-		algorithm="bwtsw"
-	wrapper:
-		"0.22.0/bio/bwa/index"
+	shell: "bwa index {input}"
 
 
 rule bwa_align:
@@ -103,7 +99,7 @@ rule checkm:
 		time=24
 	threads: 24
 	shell:
-		"module add prodigal; checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm"
+		"checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm"
 
 rule aragorn:
 	input:
@@ -116,7 +112,7 @@ rule aragorn:
 		mem=8,
 		time=1
 	shell:
-		"module add aragorn; aragorn -t {input} -o {output}"
+		"aragorn -t {input} -o {output}"
 
 rule barrnap:
 	input:

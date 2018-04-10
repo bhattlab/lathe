@@ -1,0 +1,22 @@
+name: mgwf
+channels:
+  - bioconda
+  - defaults
+  - conda-forge
+  - ursky
+dependencies:
+  - r-circlize
+  - prodigal
+  - checkm-genome
+  - aragorn
+  - metabat2
+  - barrnap
+  - quast
+  - prokka
+  - samtools
+  - bedtools
+  - kraken
+  - bwa
+  - pip:
+    - pysam
+    - numpy
