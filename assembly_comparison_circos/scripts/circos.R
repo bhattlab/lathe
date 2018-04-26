@@ -106,11 +106,24 @@ for (tp in unique(timepoint)){
 highlight = highlight[order(highlight[,2]),]
 highlight = cbind(highlight[,c(1,2)], highlight[,4])
 
-#color the highlights by the first ';' delimited portion of their original sequence names.
-highlight$type = sapply(highlight[,3], function(x) strsplit(as.character(x), ';')[[1]][1])
+
+if (length(strsplit(as.character(highlight[1,3]), ';')[[1]]) > 1){
+	#color the highlights by the first ';' delimited portion of their original sequence names.
+	highlight$type = sapply(highlight[,3], function(x) strsplit(as.character(x), ';')[[1]][1])
+} else {
+	#don't.
+	highlight$type = rep('foo', nrow(highlight))
+}
+
+
+print(head(highlight))
+print(head(highlight.intensities))
+print(timepoint)
 colnames(highlight) = c('Ref.contig', 'Coord', 'Highlight.seq', 'Group.member')
 colnames(highlight.intensities) = c('Highlight.seq', unique(sort(timepoint)))
-highlight.intensities[,2:5][highlight.intensities[,2:5]>1] = 1
+
+#intensities over 1 are reduced to 1
+highlight.intensities[,-c(1)][highlight.intensities[,-c(1)]>1] = 1
 
 #HIGHLIGHTED SEQUENCES
 for (tp in sort(unique(timepoint))){
