@@ -1,0 +1,5 @@
+Sample	Timepoint	Condition	Reads1[,Reads2]
+chrom.a	a	chromium	reads_1.fq.gz,reads2.fq.gz
+chrom.b	b	chromium	reads_1.fq.gz,reads2.fq.gz
+sr.a	a	shortread	reads_1.fq.gz,reads2.fq.gz
+sr.b	b	shortread	reads_1.fq.gz,reads2.fq.gz

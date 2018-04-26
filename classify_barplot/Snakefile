@@ -3,7 +3,8 @@ localrules: postprocess_kraken_report, collect_results, genus_barplot, species_b
 rule all:
 	input:
 		config['datasets'],
-		config['krakendb']
+		config['krakendb'],
+		"plot/species_composition.pdf"
 
 #process datasets inputs
 sample_reads = {}
