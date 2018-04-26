@@ -1,6 +1,6 @@
 import os
 
-localrules: stage_is_fasta, stage_assembly_fasta, bwa_index_is_fasta, is_location_bed
+localrules: stage_is_fasta, stage_assembly_fasta, bwa_index_is_fasta, is_location_bed, is_flanks
 
 sample = config['samplename']
 readsdir = os.path.dirname(config['reads1'])
@@ -20,7 +20,7 @@ rule stage_is_fasta:
 	output:
 		"{s}/insertion_sequence/insertion_sequence.fa".format(s = sample),
 	shell:
-		"ln -s ../../{input} {output}"
+		"cp {input} {output}"
 
 rule bwa_index_is_fasta:
 	input:
@@ -41,7 +41,7 @@ rule stage_assembly_fasta:
 	output:
 		"{sample}/assembly/assembly.fa",
 	shell:
-		"ln -s ../../{input} {output}"
+		"cp {input} {output}"
 
 rule bwa_index_assembly_fasta:
 	input:
@@ -65,10 +65,10 @@ rule align_to_is:
 		config['reads2']
 	output:
 		"{sample}/reads_to_is.bam"
-	threads: 32
+	threads: 16
 	resources:
-		mem=24,
-		time=6
+		mem=32,
+		time=12
 	shell:
 		"bwa mem -t {{threads}} {{sample}}/insertion_sequence/insertion_sequence.fa {r1} {r2} | samtools sort - --threads {{threads}} > {{output}}".format(
 			r1 = config['reads1'],
@@ -91,31 +91,36 @@ rule align_paired_reads_to_assembly:
 	output:
 		"{sample}/is_paired_to_assembly.bam",
 		"{sample}/is_paired_to_assembly.bam.bai"
+	threads: 16
 	resources:
 		mem=8,
 		time=3
 	shell:
-		"bwa mem {params.s}/assembly/assembly.fa {params.s}/is_paired_reads.fq " +
-			"| samtools sort - > {output[0]}; samtools index {output[0]}"
+		"bwa mem -t {threads} {params.s}/assembly/assembly.fa {params.s}/is_paired_reads.fq " +
+			"| samtools sort --threads {threads} - > {output[0]}; samtools index {output[0]}"
 
 rule is_location_bed:
 	params:
 		threshold = 10,
-		interval = 2000
+		interval = 1000
 	input: "{sample}/is_paired_to_assembly.bam"
 	output: "{sample}/is_locations_abundances.bed"
 	shell:
 		"""
 		samtools mpileup {input} | cut -f1,2,4 | awk '{{if ($3 > {params.threshold}) print $0}}' |
-		awk '{print $1, $2, $2 + {params.interval}, $3}' | tr ' ' '\t' | bedtools merge -c 4 -o max > {output}
+		awk '{{print $1, $2, $2 + {params.interval}, $3}}' | tr ' ' '\t' | bedtools merge -c 4 -o max > {output}
 		"""
 
 rule is_flanks:
 	input:
 		rules.is_location_bed.output,
 		rules.stage_assembly_fasta.output
-	output: "{sample}/is_locations_flanks.fa"
+	output:
+		"{sample}/is_locations.coords",
+		"{sample}/is_locations.coords.tsv",
+		"{sample}/is_locations_flanks.fa"
 	shell:
 		"cat {input[0]} | " +
-		"awk '{if ($2 > 1000) {print $1, \":\", $2-1000, \"-\", $3+1000} else {print $1, \":\", $2, \"-\", $3+1000}}' |" +
-		"tr -d ' ' | xargs -n 1 -I foo samtools faidx {input[1]} foo > {output}"
+		"awk '{{print $1, \":\", $2, \"-\", $3}}' | tr -d ' ' > {output[0]}; " +
+		"paste {output[0]} {input[0]} | cut -f1,5 > {output[1]}; " +
+		"cat {output[0]}  | xargs -n 1 -I foo samtools faidx {input[1]} foo > {output[2]}"
