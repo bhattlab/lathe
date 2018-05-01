@@ -38,6 +38,7 @@ Now activate the environment with
 
 
 This repository is forked from elimoss/metagenomics_workflows.  To sync updates, 
+
 	git fetch upstream
 	git checkout master
 	git merge upstream/master
