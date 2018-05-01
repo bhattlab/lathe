@@ -25,17 +25,19 @@ Then enter the newly downlaoded mustache directory
 
 And create the new conda environment with
 
-    conda env create -f envs/environment.yml
+	conda env create -f envs/environment.yml
 
+Future updates can be done with 
+	conda env update -f envs/environment.yaml
+	
 Now activate the environment with
 
     conda activate mgwf
 
+(This is a step that must be repeated whenever using any metagenomics workflow.)
 
-This is a step that must be repeated whenever using any metagenomics workflow.
 
-
-If there are dependency issues, please check for environment updates by running
-
-		git pull
-		conda env update -f envs/environment.yaml
+This repository is forked from elimoss/metagenomics_workflows.  To sync updates, 
+	git fetch upstream
+	git checkout master
+	git merge upstream/master
