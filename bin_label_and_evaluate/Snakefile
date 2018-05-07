@@ -3,13 +3,18 @@
 localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins
 
 samp = config['sample']
+if 'reads2' in config:
+	reads = [config['reads1'], config['reads2']]
+else:
+	reads = config['reads1']
 
 rule all:
 	input:
-		config['reads1'],
-		config['reads2'],
+		reads,
 		config['assembly'],
-		config['krakendb']
+		config['krakendb'],
+		expand("{foo}/final/{foo}.tsv", foo = config['sample'])
+
 
 rule bwa_index_setup:
 	input:
@@ -30,11 +35,11 @@ rule bwa_index:
 	input:
 		"{samp}/idx/{samp}.fa"
 	output:
-		"{samp}/idx/{samp}.amb",
-		"{samp}/idx/{samp}.ann",
-		"{samp}/idx/{samp}.bwt",
-		"{samp}/idx/{samp}.pac",
-		"{samp}/idx/{samp}.sa"
+		"{samp}/idx/{samp}.fa.amb",
+		"{samp}/idx/{samp}.fa.ann",
+		"{samp}/idx/{samp}.fa.bwt",
+		"{samp}/idx/{samp}.fa.pac",
+		"{samp}/idx/{samp}.fa.sa"
 	log:
 		"{samp}/logs/bwa_index.log"
 	resources:
@@ -47,26 +52,22 @@ rule bwa_index:
 rule bwa_align:
 	input:
 		"{samp}/idx/{samp}.fa",
-		config['reads1'],
-		config['reads2'],
-		"{samp}/idx/{samp}.amb",
-		"{samp}/idx/{samp}.ann",
-		"{samp}/idx/{samp}.bwt",
-		"{samp}/idx/{samp}.pac",
-		"{samp}/idx/{samp}.sa"
+		reads,
+		"{samp}/idx/{samp}.fa.amb",
+		"{samp}/idx/{samp}.fa.ann",
+		"{samp}/idx/{samp}.fa.bwt",
+		"{samp}/idx/{samp}.fa.pac",
+		"{samp}/idx/{samp}.fa.sa"
 	log:
 		"{samp}/logs/bwa_mem.log"
 	output:
 		"{samp}/{samp}.bam"
 	resources:
-		mem=32,
+		mem=16,
 		time=12
-	threads: 24
-	params:
-		r1 = config['reads1'],
-		r2 = config['reads2']
+	threads: 8
 	shell:
-		"bwa mem -t {threads}" + " {samp}/idx/{samp} {params.r1} {params.r2} | samtools sort --threads {threads}" + " > {output}"
+		"bwa mem -t {threads}" + " {input[0]} {input[1]} | samtools sort --threads {threads}" + " > {output}"
 
 rule metabat:
 	input:
