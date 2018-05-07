@@ -1,6 +1,6 @@
 kraken:
     partition: nih_s10
 bwa_align:
-    partition: nih_s10
+    partition: batch #nih_s10
 checkm:
-    partition: nih_s10
+    partition: batch #nih_s10
