@@ -82,7 +82,7 @@ rule metabat:
 		time=24
 	threads: 24
 	shell:
-		"~/moss/tools/classification_and_binning/metabat/runMetaBat.sh --seed 1 -t {threads} --unbinned " \
+		"runMetaBat.sh --seed 1 -t {threads} --unbinned " \
 		+ "{input};" +
 		" mv {samp}.fa.metabat-bins--unbinned/* {samp}/bins/; \
 		rmdir {samp}.fa.metabat-bins--unbinned/; \
