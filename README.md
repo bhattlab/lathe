@@ -19,7 +19,7 @@ Once installed, clone this github directory to some location where it can be sto
 
     git clone https://github.com/elimoss/metagenomics_workflows.git
 
-Then enter the newly downlaoded mustache directory
+Then enter the newly downloaded directory
 
     cd metagenomics_workflows
 
