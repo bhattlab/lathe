@@ -28,21 +28,26 @@ highlight_size = 1.2
 tick.interval = 0.5e6
 track.height = 0.1
 contig.alpha = 0.3
-bed1.color = adjustcolor("#409159", alpha = contig.alpha)
-bed2.color = adjustcolor("#E69F00", alpha = contig.alpha)
-bed3.color = adjustcolor("#5AC6E2", alpha = contig.alpha)
+
+color1 = "#241E1E"
+color2 = "#557BB8"
+color3 = "#5AC6E2"
+
+bed1.color = adjustcolor(color1, alpha = contig.alpha)
+bed2.color = adjustcolor(color2, alpha = contig.alpha)
+bed3.color = adjustcolor(color3, alpha = contig.alpha)
 bed.colors.faint = c(bed1.color, bed2.color, bed3.color)
 
-bed1.color = adjustcolor("#409159", alpha = 0.8)
-bed2.color = adjustcolor("#E69F00", alpha = 0.9)
-bed3.color = adjustcolor("#5AC6E2", alpha = 0.9)
+bed1.color = adjustcolor(color1, alpha = 0.8)
+bed2.color = adjustcolor(color2, alpha = 0.9)
+bed3.color = adjustcolor(color3, alpha = 0.9)
 bed.colors.bold = c(bed1.color, bed2.color, bed3.color)
 
 
 locus.alpha = 1
 
-color.highlight = rgb(1, 0.3, 0.1, alpha = locus.alpha)
-color.highlight2 = rgb(0, 0.5, 1, alpha = locus.alpha)
+color.highlight = rgb(0.8, 0.3, 0.1, alpha = locus.alpha)
+color.highlight2 = rgb(0, 0.7, 0.5, alpha = locus.alpha)
 highlight.colors = c(color.highlight, color.highlight2)
 
 contig_height = 0.5
@@ -145,7 +150,7 @@ for (tp in sort(unique(timepoint))){
 
 		data = region[region[,2] >= 0,]
 		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 1, col = color, cex = highlight_size)
-		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 16, col = color, cex = (data[,2]) * highlight_size)
+		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 16, col = color, cex = (1-data[,2]) * highlight_size)
 
 		no_data = region[region[,2] < 0,]
 		circos.points(no_data[,1], rep(length(unique(timepoint)) + 2.5, nrow(no_data)), pch = 4, col = color, cex = highlight_size)
