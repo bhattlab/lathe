@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins
+localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins, kraken_translate
 
 samp = config['sample']
 if 'reads2' in config:
