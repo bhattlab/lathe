@@ -25,8 +25,8 @@ Then enter the newly downloaded directory
 
 And create the new conda environment with
 
-	conda update conda snakemake
-	conda env create -f envs/environment.yml
+	conda update conda
+	conda env create -f <absolute path to>/envs/environment.yml
 
 Now activate the environment with
 
