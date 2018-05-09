@@ -23,14 +23,16 @@ Then enter the newly downloaded directory
 
     cd metagenomics_workflows
 
-And create the new conda environment with
+And create the new conda environments with
 
 	conda update conda
-	conda env create -f <absolute path to>/envs/environment.yml
+	conda env create -f <absolute path to>/envs/mgwf.yml
+	conda env create -f <absolute path to>/envs/snakemake.yml
 
 Now activate the environment with
 
     source activate mgwf
+    source activate snakemake
 
 
 This is a step that must be repeated whenever using any metagenomics workflow.
