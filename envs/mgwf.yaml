@@ -5,7 +5,6 @@ channels:
   - conda-forge
   - ursky
 dependencies:
-  - snakemake
   - r-circlize
   - prodigal
   - checkm-genome
