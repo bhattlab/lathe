@@ -30,7 +30,7 @@ And create the new conda environment with
 
 Now activate the environment with
 
-    conda activate mgwf
+    source activate mgwf
 
 
 This is a step that must be repeated whenever using any metagenomics workflow.
