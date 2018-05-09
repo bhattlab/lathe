@@ -20,3 +20,5 @@
  * **Krakendb**: Kraken database with which to classify asssembly contigs.
  
  * **Read length**: read length.
+
+Known problems: occasionally fails after binning step. Just re-run snakemake.  This is a problem with dynamic job scheduling, and will hopefully be fixed in a future snakemake update.
