@@ -25,7 +25,8 @@ Then enter the newly downloaded directory
 
 And create the new conda environment with
 
-    conda env create -f envs/environment.yml
+	conda update conda snakemake
+	conda env create -f envs/environment.yml
 
 Now activate the environment with
 
@@ -37,5 +38,5 @@ This is a step that must be repeated whenever using any metagenomics workflow.
 
 If there are dependency issues, please check for environment updates by running
 
-		git pull
-		conda env update -f envs/environment.yaml
+	git pull
+	conda env update -f envs/environment.yaml
