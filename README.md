@@ -31,7 +31,6 @@ And create the new conda environments with
 
 Now activate the environment with
 
-    source activate mgwf
     source activate snakemake
 
 
