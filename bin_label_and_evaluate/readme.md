@@ -1,9 +1,9 @@
 # Sequence binning and bin annotation and evaluation workflow
-assembly:assembly_links/6753_foo/contigs.fasta,
-sample:sr_6753_foo,
-reads1:read_links/6753_foo_1.fq.gz,
-reads2:read_links/6753_foo_2.fq.gz,
-krakendb:~/bhattlab/data/program_indices/kraken/kraken_custom/
+	assembly:assembly_links/6753_foo/contigs.fasta,
+	sample:sr_6753_foo,
+	reads1:read_links/6753_foo_1.fq.gz,
+	reads2:read_links/6753_foo_2.fq.gz,
+	krakendb:~/bhattlab/data/program_indices/kraken/kraken_custom/
 
 ### Before running this workflow, please do the following:
 
