@@ -11,6 +11,7 @@ rule all:
 		expand("dotplot/{o}.pdf", o = output)
 
 rule align:
+	conda: "envs/mgwf.yaml"
 	input:
 		config['assembly'],
 		config['reference']
@@ -18,16 +19,19 @@ rule align:
 	shell: "nucmer {input} -p aln/{wildcards.id}"
 
 rule filter:
+	conda: "envs/mgwf.yaml"
 	input: rules.align.output
 	output: "aln/{id}.filt"
 	shell: "delta-filter -1 {input} > {output}"
 
 rule postprocess:
+	conda: "envs/mgwf.yaml"
 	input: rules.filter.output
 	output: "aln/{id}.tsv"
 	shell: "show-coords -T {input} > {output}"
 
 rule dotplot:
+	conda: "envs/mgwf.yaml"
 	input: rules.postprocess.output
 	output:	"dotplot/{id}.pdf"
 	script: "scripts/dotplot.R"

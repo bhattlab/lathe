@@ -32,6 +32,8 @@ rule targets:
 		config['assemblies']
 
 rule faidx:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		config['reference']
 	output:
@@ -53,6 +55,8 @@ rule stage_assemblies:
 
 #Assembly alignments to reference
 rule assembly_alignment:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		config['reference'],
 		rules.stage_assemblies.output
@@ -64,6 +68,8 @@ rule assembly_alignment:
 			"show-coords aligned/{wildcards.f}.delta.filt -T > aligned/{wildcards.f}.coords; "
 
 rule assembly_alignment_filter:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		rules.assembly_alignment.output
 	output:
@@ -74,6 +80,8 @@ rule assembly_alignment_filter:
 		"scripts/coord_filter.py"
 
 rule bwa_index:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		config['reference']
 	output:
@@ -93,6 +101,8 @@ rule bwa_index:
 
 #16S (highlight sequence) alignments
 rule highlight_alignments:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"bwa_idx/ref.fa",
 		config['highlight_sequences']
@@ -103,6 +113,8 @@ rule highlight_alignments:
 		"samtools view highlighted/highlights.sam | grep NM:i:0 | grep XS:i:0| cut -f1,3,4 | sort -u -k1,1 | awk '{{print $2, $3, $3 + 1000, $1}}' > {output}"
 
 rule circos:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		rules.faidx.output,
 		config['dark_contigs'],

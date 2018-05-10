@@ -22,6 +22,7 @@ with open(config['datasets']) as asmf:
 		sample_reads[sample] = reads
 
 rule kraken:
+	conda: "envs/mgwf.yaml"
 	input: lambda wildcards: sample_reads[wildcards.samp]
 	output: "classify/raw/{samp}.krak"
 	log: "logs/kraken.log"
@@ -34,6 +35,7 @@ rule kraken:
 		" {input} --output {output} --threads {threads}" #--preload
 
 rule kraken_report:
+	conda: "envs/mgwf.yaml"
 	input: rules.kraken.output
 	output: "classify/raw/{samp}.krak.report"
 	log: "logs/kraken.log"
@@ -46,17 +48,20 @@ rule kraken_report:
 		"> {output}"
 
 rule postprocess_kraken_report:
+	conda: "envs/mgwf.yaml"
 	input: rules.kraken_report.output
 	output: "classify/postprocessed/{samp}.tsv"
 	log: "logs/kraken.log"
 	shell: "cat {input} | tr -s ' ' '\t' > {output}"
 
 rule collect_results:
+	conda: "envs/mgwf.yaml"
 	input: expand("classify/postprocessed/{samp}.tsv", samp = sample_reads.keys())
 	output: "classify/class_long.tsv"
 	script: "scripts/collate_results.py"
 
 rule genus_barplot:
+	conda: "envs/mgwf.yaml"
 	input: rules.collect_results.output
 	output: "plot/genus_composition.pdf"
 	params: taxlevel='G'
@@ -64,6 +69,7 @@ rule genus_barplot:
 
 
 rule species_barplot:
+	conda: "envs/mgwf.yaml"
 	input: rules.collect_results.output
 	output: "plot/species_composition.pdf"
 	params: taxlevel='S'

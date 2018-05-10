@@ -17,6 +17,8 @@ rule all:
 
 
 rule bwa_index_setup:
+	conda:
+        "envs/mgwf.yaml"
 	input:
 		config['assembly']
 	output:
@@ -32,6 +34,8 @@ rule bwa_index_setup:
 
 
 rule bwa_index:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/idx/{samp}.fa"
 	output:
@@ -50,6 +54,8 @@ rule bwa_index:
 
 
 rule bwa_align:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/idx/{samp}.fa",
 		reads,
@@ -70,6 +76,8 @@ rule bwa_align:
 		"bwa mem -t {threads}" + " {input[0]} {input[1]} | samtools sort --threads {threads}" + " > {output}"
 
 rule metabat:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/idx/{samp}.fa",
 		"{samp}/{samp}.bam"
@@ -89,6 +97,8 @@ rule metabat:
 		mv {samp}.fa.depth.txt {samp}/"
 
 rule checkm:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		dynamic(rules.metabat.output)
 	output:
@@ -103,6 +113,8 @@ rule checkm:
 		"checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm"
 
 rule aragorn:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/bins/{bin}.fa"
 	output:
@@ -116,6 +128,8 @@ rule aragorn:
 		"aragorn -t {input} -o {output}"
 
 rule barrnap:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/bins/{bin}.fa"
 	output:
@@ -129,6 +143,8 @@ rule barrnap:
 		"barrnap {input} > {output}"
 
 rule quast:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/bins/{bin}.fa"
 	output:
@@ -143,6 +159,8 @@ rule quast:
 		"--contig-thresholds 0,10000,50000,100000,250000,500000,1000000,2000000,3000000 --fast "
 
 rule prokka:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/bins/{bin}.fa"
 	output:
@@ -158,6 +176,8 @@ rule prokka:
 		"--prefix {samp}_{wildcards.bin}.fa --centre X --compliant --force --cpus {threads}"
 
 rule bam_idx:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/{samp}.bam"
 	output:
@@ -171,6 +191,8 @@ rule bam_idx:
 		"samtools index {input}"
 
 rule bam_idxstats:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/{samp}.bam",
 		"{samp}/{samp}.bam.bai"
@@ -185,6 +207,8 @@ rule bam_idxstats:
 		"samtools idxstats {input} > {output}"
 
 rule bin_idxstats:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/bins/{bin}.fa",
 		"{samp}/{samp}.bam.bai.tsv"
@@ -199,6 +223,8 @@ rule bin_idxstats:
 		"grep '>' {input[0]} | tr -d '>' | xargs -I foo -n 1 grep -P 'foo\t' {input[1]} > {output}"
 
 rule bin_coverage:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		rules.bin_idxstats.output
 	output:
@@ -214,6 +240,8 @@ rule bin_coverage:
 		"scripts/bin_coverage.py"
 
 rule fasta_index:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/bins/{bin}.fa"
 	output:
@@ -228,21 +256,25 @@ rule fasta_index:
 		"samtools faidx {input}"
 
 rule kraken:
-		input:
-			"{samp}/idx/{samp}.fa"
-		output:
-			"{samp}/classify/{samp}.krak"
-		log:
-			"{samp}/logs/kraken.log"
-		resources:
-			mem=320,
-			time=6
-		threads: 24
-		shell:
-			"kraken --db {krak} ".format(krak = config['krakendb']) +
-			" --fasta-input {input} --output {output} --preload --threads {threads}"
+	conda:
+		"envs/mgwf.yaml"
+	input:
+		"{samp}/idx/{samp}.fa"
+	output:
+		"{samp}/classify/{samp}.krak"
+	log:
+		"{samp}/logs/kraken.log"
+	resources:
+		mem=320,
+		time=6
+	threads: 24
+	shell:
+		"kraken --db {krak} ".format(krak = config['krakendb']) +
+		" --fasta-input {input} --output {output} --preload --threads {threads}"
 
 rule kraken_translate:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/classify/{samp}.krak"
 	output:
@@ -258,6 +290,8 @@ rule kraken_translate:
 		"> {output}"
 
 rule label_bins:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		"{samp}/classify/{samp}.tsv",
 		dynamic(rules.fasta_index.output)
@@ -269,6 +303,8 @@ rule label_bins:
 		"scripts/assign_species.py"
 
 rule postprocess_raw:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		dynamic(rules.prokka.output),
 		dynamic(rules.quast.output),
@@ -309,6 +345,8 @@ rule postprocess_raw:
 			"cat {samp}/classify/bin_species_calls.tsv" + " | sed 's/\.fa//g' | sed 's/^/{samp}\t/g') > {samp}/final/classify.tmp;"
 
 rule postprocess_final:
+	conda:
+		"envs/mgwf.yaml"
 	input:
 		rules.postprocess_raw.output
 	output:

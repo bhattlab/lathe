@@ -23,6 +23,7 @@ rule stage_is_fasta:
 		"cp {input} {output}"
 
 rule bwa_index_is_fasta:
+	conda: "envs/mgwf.yaml"
 	input:
 		"{sample}/insertion_sequence/insertion_sequence.fa",
 	output:
@@ -36,6 +37,7 @@ rule bwa_index_is_fasta:
 		"bwa index {input}"
 
 rule stage_assembly_fasta:
+	conda: "envs/mgwf.yaml"
 	input:
 		config['assembly_fasta']
 	output:
@@ -44,6 +46,7 @@ rule stage_assembly_fasta:
 		"cp {input} {output}"
 
 rule bwa_index_assembly_fasta:
+	conda: "envs/mgwf.yaml"
 	input:
 		"{sample}/assembly/assembly.fa",
 	output:
@@ -58,6 +61,7 @@ rule bwa_index_assembly_fasta:
 
 
 rule align_to_is:
+	conda: "envs/mgwf.yaml"
 	input:
 		rules.stage_is_fasta.output,
 		rules.bwa_index_is_fasta.output,
@@ -75,6 +79,7 @@ rule align_to_is:
 			r2 = config['reads2'])
 
 rule filter_is_paired_reads:
+	conda: "envs/mgwf.yaml"
 	input: rules.align_to_is.output
 	output:
 		"{sample}/is_paired_reads.fq",
@@ -82,6 +87,7 @@ rule filter_is_paired_reads:
 		"samtools view {input} -h -f4 -F8 | samtools fastq - > {output}"
 
 rule align_paired_reads_to_assembly:
+	conda: "envs/mgwf.yaml"
 	params:
 		s = sample
 	input:
@@ -100,6 +106,7 @@ rule align_paired_reads_to_assembly:
 			"| samtools sort --threads {threads} - > {output[0]}; samtools index {output[0]}"
 
 rule is_location_bed:
+	conda: "envs/mgwf.yaml"
 	params:
 		threshold = 10,
 		interval = 1000
@@ -112,6 +119,7 @@ rule is_location_bed:
 		"""
 
 rule is_flanks:
+	conda: "envs/mgwf.yaml"
 	input:
 		rules.is_location_bed.output,
 		rules.stage_assembly_fasta.output
