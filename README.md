@@ -40,4 +40,4 @@ This is a step that must be repeated whenever using any metagenomics workflow.
 If there are dependency issues, please check for environment updates by running
 
 	git pull
-	conda env update -f envs/environment.yaml
+	conda env update -f envs/mgwf.yaml
