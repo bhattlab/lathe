@@ -1,3 +1,0 @@
-FileNotFoundError in line 10 of /srv/gsfs0/projects/bhatt/moss/tools/metagenomics_workflows/circos_wf/Snakefile:
-[Errno 2] No such file or directory: 'inputs/assemblies.tsv'
-  File "/srv/gsfs0/projects/bhatt/moss/tools/metagenomics_workflows/circos_wf/Snakefile", line 10, in <module>

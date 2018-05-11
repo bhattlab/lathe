@@ -1,6 +1,0 @@
-assembly:contigs.fasta
-sample:samplename
-reads1:reads_1.fq.gz
-reads2:reads_2.fq.gz
-krakendb:/srv/gsfs0/projects/bhatt/bhattlab/data/program_indices/kraken/kraken_custom/
-read_length:150
