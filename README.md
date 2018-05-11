@@ -30,7 +30,7 @@ Then enter the newly downloaded directory
 And create the new conda environments with
 
 	conda update conda
-	conda env create -f <absolute path to>/envs/mgwf.yml
+	conda env create -f <absolute path to>/envs/mgwf.yaml
 
 Now activate the environment with
 
