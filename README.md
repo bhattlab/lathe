@@ -43,3 +43,4 @@ If there are dependency issues, please check for environment updates by running
 
 	git pull
 	conda env update -f envs/mgwf.yaml
+
