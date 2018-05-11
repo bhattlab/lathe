@@ -1,0 +1,2 @@
+datasets: input.tsv
+krakendb: "foo/bar/kraken_db"

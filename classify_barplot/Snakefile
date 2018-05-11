@@ -1,0 +1,76 @@
+localrules: postprocess_kraken_report, collect_results, genus_barplot, species_barplot
+
+rule all:
+	input:
+		config['datasets'],
+		config['krakendb'],
+		"plot/species_composition.pdf"
+
+#process datasets inputs
+sample_reads = {}
+
+with open(config['datasets']) as asmf:
+	basedir = os.path.dirname(config['datasets'])
+	for l in asmf.readlines():
+		s = l.strip().split("\t")
+		if len(s) == 1 or s[0] == 'Sample':
+			continue
+
+		sample = s[0]
+		reads = s[3].split(',')
+
+		sample_reads[sample] = reads
+
+rule kraken:
+	conda: "envs/mgwf.yaml"
+	input: lambda wildcards: sample_reads[wildcards.samp]
+	output: "classify/raw/{samp}.krak"
+	log: "logs/kraken.log"
+	resources:
+		mem=320,
+		time=6
+	threads: 24
+	shell:
+		"kraken --db {krak} ".format(krak = config['krakendb']) +
+		" {input} --output {output} --threads {threads}" #--preload
+
+rule kraken_report:
+	conda: "envs/mgwf.yaml"
+	input: rules.kraken.output
+	output: "classify/raw/{samp}.krak.report"
+	log: "logs/kraken.log"
+	resources:
+		mem=8,
+		time=1
+	shell:
+		"kraken-report {input} " +
+		"--db {krak} ".format(krak=config['krakendb']) +
+		"> {output}"
+
+rule postprocess_kraken_report:
+	conda: "envs/mgwf.yaml"
+	input: rules.kraken_report.output
+	output: "classify/postprocessed/{samp}.tsv"
+	log: "logs/kraken.log"
+	shell: "cat {input} | tr -s ' ' '\t' > {output}"
+
+rule collect_results:
+	conda: "envs/mgwf.yaml"
+	input: expand("classify/postprocessed/{samp}.tsv", samp = sample_reads.keys())
+	output: "classify/class_long.tsv"
+	script: "scripts/collate_results.py"
+
+rule genus_barplot:
+	conda: "envs/mgwf.yaml"
+	input: rules.collect_results.output
+	output: "plot/genus_composition.pdf"
+	params: taxlevel='G'
+	script: "scripts/composition_barplot.R"
+
+
+rule species_barplot:
+	conda: "envs/mgwf.yaml"
+	input: rules.collect_results.output
+	output: "plot/species_composition.pdf"
+	params: taxlevel='S'
+	script: "scripts/composition_barplot.R"

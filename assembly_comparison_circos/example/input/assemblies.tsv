@@ -1,0 +1,12 @@
+short_read_assemblies/6753_a/contigs.fasta	shortread	a
+short_read_assemblies/6753_b/contigs.fasta	shortread	b
+short_read_assemblies/6753_c/contigs.fasta	shortread	c
+short_read_assemblies/6753_d/contigs.fasta	shortread	d
+gemcode_assemblies/athena.a-trim.fa	gemcode	a
+gemcode_assemblies/athena.b-trim.fa	gemcode	b
+gemcode_assemblies/athena.c-trim.fa	gemcode	c
+gemcode_assemblies/athena.d-trim.fa	gemcode	d
+chromium_assemblies/athena.a.fa	chromium	a
+chromium_assemblies/athena.b.fa	chromium	b
+chromium_assemblies/athena.c.fa	chromium	c
+chromium_assemblies/athena.d.fa	chromium	d
