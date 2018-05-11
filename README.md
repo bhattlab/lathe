@@ -15,30 +15,31 @@ Snakemake workflow for visualizing assemblies of a particular genome across cond
 
 First, install miniconda3. This is an environment management system that should keep everything organized.
 
-Once installed, clone this github directory to some location where it can be stored permanently.
+Then install snakemake.  This can be done with:
+
+	pip install snakemake
+
+Next, clone this github directory to some location where it can be stored permanently.
 
     git clone https://github.com/elimoss/metagenomics_workflows.git
 
-Then enter the newly downlaoded mustache directory
+Then enter the newly downloaded directory
 
     cd metagenomics_workflows
 
-And create the new conda environment with
+And create the new conda environments with
 
-	conda env create -f envs/environment.yml
+	conda update conda
+	conda env create -f <absolute path to>/envs/mgwf.yaml
 
-Future updates can be done with 
-	conda env update -f envs/environment.yaml
-	
 Now activate the environment with
 
-    conda activate mgwf
+    source activate mgwf
 
-(This is a step that must be repeated whenever using any metagenomics workflow.)
+This is a step that must be repeated whenever using any metagenomics workflow.
 
 
-This repository is forked from elimoss/metagenomics_workflows.  To sync updates, 
+If there are dependency issues, please check for environment updates by running
 
-	git fetch upstream
-	git checkout master
-	git merge upstream/master
+	git pull
+	conda env update -f envs/mgwf.yaml
