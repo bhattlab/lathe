@@ -1,10 +1,13 @@
 name: mgwf
 channels:
   - bioconda
-  - defaults
   - conda-forge
   - ursky
+  - defaults
 dependencies:
+  - readline=6.2
+  - r-ggplot2
+  - r-doBy
   - r-circlize
   - prodigal
   - checkm-genome
