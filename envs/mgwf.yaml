@@ -5,6 +5,8 @@ channels:
   - conda-forge
   - ursky
 dependencies:
+  - r-ggplot2
+  - r-doBy
   - r-circlize
   - prodigal
   - checkm-genome
