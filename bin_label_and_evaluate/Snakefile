@@ -3,7 +3,7 @@
 localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins, kraken_translate
 
 samp = config['sample']
-if 'reads2' in config:
+if 'reads2' in config and not config['reads2'] == '':
 	reads = [config['reads1'], config['reads2']]
 else:
 	reads = [config['reads1']]
@@ -75,8 +75,8 @@ rule metabat:
 		"{samp}/{samp}.bam"
 	output:
 		dynamic("{samp}/bins/{bin}.fa") #the number of bins is unknown prior to execution, hence 'dynamic'
-	log:
-		"{samp}/logs/metabat.log"
+	#log:
+		#"{samp}/logs/metabat.log"
 	resources:
 		mem=64,
 		time=24
@@ -108,7 +108,7 @@ rule aragorn:
 	output:
 		"{samp}/rna/trna/{bin}.fa.txt"
 	log:
-		"{samp}/logs/aragorn.log"
+		"{samp}/logs/aragorn_{bin}.log"
 	resources:
 		mem=8,
 		time=1
@@ -121,7 +121,7 @@ rule barrnap:
 	output:
 		"{samp}/rna/rrna/{bin}.fa.txt"
 	log:
-		"{samp}/logs/barrnap.log"
+		"{samp}/logs/barrnap_{bin}.log"
 	resources:
 		mem=8,
 		time=1
@@ -134,7 +134,7 @@ rule quast:
 	output:
 		"{samp}/quast/{bin}.fa"
 	log:
-		"{samp}/logs/quast.log"
+		"{samp}/logs/quast_{bin}.log"
 	resources:
 		mem=8,
 		time=1
@@ -148,7 +148,7 @@ rule prokka:
 	output:
 		"{samp}/prokka/{bin}.fa/{samp}_{bin}.fa.gff"
 	log:
-		"{samp}/logs/prokka.log"
+		"{samp}/logs/prokka_{bin}.log"
 	resources:
 		mem=48,
 		time=1,
@@ -191,7 +191,7 @@ rule bin_idxstats:
 	output:
 		"{samp}/coverage/raw/{bin}.tsv"
 	log:
-		"{samp}/logs/coverage.log"
+		"{samp}/logs/coverage_{bin}.log"
 	resources:
 		mem=2,
 		time=1
@@ -204,7 +204,7 @@ rule bin_coverage:
 	output:
 		"{samp}/coverage/{bin}.txt"
 	log:
-		"{samp}/logs/coverage.log"
+		"{samp}/logs/coverage_{bin}.log"
 	resources:
 		mem=2,
 		time=1
@@ -219,7 +219,7 @@ rule fasta_index:
 	output:
 		"{samp}/bins/{bin}.fa.fai"
 	log:
-		"{samp}/logs/faidx.log"
+		"{samp}/logs/faidx_{bin}.log"
 	resources:
 		mem=8,
 		time=1

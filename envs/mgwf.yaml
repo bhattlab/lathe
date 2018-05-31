@@ -4,7 +4,7 @@ channels:
   - conda-forge
   - ursky
   - defaults
-dependencies:
+dependencies: 
   - readline=6.2
   - r-ggplot2
   - r-doBy
