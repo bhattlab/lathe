@@ -233,7 +233,7 @@ rule kraken:
 	output:
 		"{samp}/classify/{samp}.krak"
 	log:
-		"{samp}/logs/kraken.log"
+		"{samp}/logs/kraken_class.log"
 	resources:
 		mem=320,
 		time=6
@@ -247,8 +247,8 @@ rule kraken_translate:
 		"{samp}/classify/{samp}.krak"
 	output:
 		"{samp}/classify/{samp}.tsv"
-	log:
-		"{samp}/logs/kraken.log"
+	log: 
+		"{samp}/logs/kraken_trans.log"
 	resources:
 		mem=8,
 		time=1
