@@ -191,9 +191,9 @@ rule bin_idxstats:
 	output:
 		"{samp}/coverage/raw/{bin}.tsv"
 	log:
-		"{samp}/logs/coverage_{bin}.log"
+		"{samp}/logs/coverage_idxstats_{bin}.log"
 	resources:
-		mem=2,
+		mem=2, 
 		time=1
 	shell:
 		"grep '>' {input[0]} | tr -d '>' | xargs -I foo -n 1 grep -P 'foo\t' {input[1]} > {output}"
@@ -247,7 +247,7 @@ rule kraken_translate:
 		"{samp}/classify/{samp}.krak"
 	output:
 		"{samp}/classify/{samp}.tsv"
-	log: 
+	log:
 		"{samp}/logs/kraken_trans.log"
 	resources:
 		mem=8,
