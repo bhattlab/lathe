@@ -177,7 +177,7 @@ rule bam_idxstats:
 	output:
 		"{samp}/{samp}.bam.bai.tsv"
 	log:
-		"{samp}/logs/bamidx.log"
+		"{samp}/logs/bamidxstats.log"
 	resources:
 		mem=2,
 		time=2
@@ -193,7 +193,7 @@ rule bin_idxstats:
 	log:
 		"{samp}/logs/coverage_idxstats_{bin}.log"
 	resources:
-		mem=2, 
+		mem=2,
 		time=1
 	shell:
 		"grep '>' {input[0]} | tr -d '>' | xargs -I foo -n 1 grep -P 'foo\t' {input[1]} > {output}"
@@ -237,10 +237,9 @@ rule kraken:
 	resources:
 		mem=320,
 		time=6
-	threads: 24
 	shell:
 		"kraken --db {krak} ".format(krak = config['krakendb']) +
-		" --fasta-input {input} --output {output} --preload --threads {threads}"
+		" --fasta-input {input} --output {output} --preload"
 
 rule kraken_translate:
 	input:
