@@ -8,6 +8,11 @@ if 'reads2' in config and not config['reads2'] == '':
 else:
 	reads = [config['reads1']]
 
+if 'long_read' in config and config['long_read']:
+	long_read = True
+else:
+	long_read = False
+
 rule all:
 	input:
 		reads,
@@ -69,24 +74,44 @@ rule bwa_align:
 	shell:
 		"bwa mem -t {threads}" + " {input[0]} " + ' '.join(reads) + " | samtools sort --threads {threads}" + " > {output}"
 
+rule align_lr:
+	input:
+		"{samp}/idx/{samp}.fa",
+		reads
+	log:
+		"{samp}/logs/align_lr.log"
+	output:
+		"{samp}/{samp}_lr.bam"
+	resources:
+		mem=16,
+		time=6
+	threads: 8
+	shell:
+		"minimap2 -t {threads} -ax map-ont {input} | samtools sort --threads {threads} > {output}"
+
+rule metabat_pre:
+	input:
+		"{samp}/{samp}_lr.bam" if long_read else "{samp}/{samp}.bam" #choose a long read alignment or short read alignment
+	output:
+		'{samp}/{samp}.fa.depth.txt',
+		'{samp}/{samp}.fa.paired.txt'
+	shell:
+		'jgi_summarize_bam_contig_depths --outputDepth {samp}/{samp}.fa.depth.txt --pairedContigs {samp}/{samp}.fa.paired.txt ' +
+		'--minContigLength 1000 --minContigDepth 1  {input} --percentIdentity 50'
+
 rule metabat:
 	input:
 		"{samp}/idx/{samp}.fa",
-		"{samp}/{samp}.bam"
+		rules.metabat_pre.output
 	output:
 		dynamic("{samp}/bins/{bin}.fa") #the number of bins is unknown prior to execution, hence 'dynamic'
-	#log:
-		#"{samp}/logs/metabat.log"
 	resources:
 		mem=64,
 		time=24
 	threads: 24
 	shell:
-		"runMetaBat.sh --seed 1 -t {threads} --unbinned " \
-		+ "{input};" +
-		" mv {samp}.fa.metabat-bins--unbinned/* {samp}/bins/; \
-		rmdir {samp}.fa.metabat-bins--unbinned/; \
-		mv {samp}.fa.depth.txt {samp}/"
+		'metabat2 --seed 1 -t {threads} --unbinned --inFile {samp}/idx/{samp}.fa ' +
+		'--outFile {samp}/bins/bin --abdFile {samp}/{samp}.fa.depth.txt'
 
 rule checkm:
 	input:
@@ -159,7 +184,7 @@ rule prokka:
 
 rule bam_idx:
 	input:
-		"{samp}/{samp}.bam"
+		"{samp}/{samp}_lr.bam" if long_read else "{samp}/{samp}.bam" #choose a long read alignment or short read alignment
 	output:
 		"{samp}/{samp}.bam.bai"
 	log:
@@ -172,7 +197,7 @@ rule bam_idx:
 
 rule bam_idxstats:
 	input:
-		"{samp}/{samp}.bam",
+		"{samp}/{samp}_lr.bam" if long_read else "{samp}/{samp}.bam", #choose a long read alignment or short read alignment,
 		"{samp}/{samp}.bam.bai"
 	output:
 		"{samp}/{samp}.bam.bai.tsv"
