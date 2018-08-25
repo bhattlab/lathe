@@ -85,7 +85,7 @@ rule align_lr:
 	resources:
 		mem=16,
 		time=6
-	threads: 8
+	threads: 32
 	shell:
 		"minimap2 -t {threads} -ax map-ont {input} | samtools sort --threads {threads} > {output}"
 
@@ -93,8 +93,7 @@ rule metabat_pre:
 	input:
 		"{samp}/{samp}_lr.bam" if long_read else "{samp}/{samp}.bam" #choose a long read alignment or short read alignment
 	output:
-		'{samp}/{samp}.fa.depth.txt',
-		'{samp}/{samp}.fa.paired.txt'
+		'{samp}/{samp}.fa.depth.txt'
 	shell:
 		'jgi_summarize_bam_contig_depths --outputDepth {samp}/{samp}.fa.depth.txt --pairedContigs {samp}/{samp}.fa.paired.txt ' +
 		'--minContigLength 1000 --minContigDepth 1  {input} --percentIdentity 50'
@@ -186,7 +185,7 @@ rule bam_idx:
 	input:
 		"{samp}/{samp}_lr.bam" if long_read else "{samp}/{samp}.bam" #choose a long read alignment or short read alignment
 	output:
-		"{samp}/{samp}.bam.bai"
+		"{samp}/{samp}_lr.bam.bai" if long_read else "{samp}/{samp}.bam.bai" #choose a long read alignment or short read alignment
 	log:
 		"{samp}/logs/bamidx.log"
 	resources:
@@ -198,7 +197,7 @@ rule bam_idx:
 rule bam_idxstats:
 	input:
 		"{samp}/{samp}_lr.bam" if long_read else "{samp}/{samp}.bam", #choose a long read alignment or short read alignment,
-		"{samp}/{samp}.bam.bai"
+		"{samp}/{samp}_lr.bam.bai" if long_read else "{samp}/{samp}.bam.bai", #choose a long read alignment or short read alignment,
 	output:
 		"{samp}/{samp}.bam.bai.tsv"
 	log:
@@ -207,7 +206,7 @@ rule bam_idxstats:
 		mem=2,
 		time=2
 	shell:
-		"samtools idxstats {input} > {output}"
+		"samtools idxstats {input[0]} > {output}"
 
 rule bin_idxstats:
 	input:
