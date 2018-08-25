@@ -156,7 +156,7 @@ rule quast:
 	input:
 		"{samp}/bins/{bin}.fa"
 	output:
-		"{samp}/quast/{bin}.fa"
+		"{samp}/quast/{bin}.fa/report.txt"
 	log:
 		"{samp}/logs/quast_{bin}.log"
 	resources:
