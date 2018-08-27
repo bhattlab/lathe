@@ -163,7 +163,7 @@ rule quast:
 		mem=8,
 		time=1
 	shell:
-		"quast.py -o {output} {input} " +
+		"quast.py -o {samp}/quast/{bin}.fa/ {input} " +
 		"--contig-thresholds 0,10000,50000,100000,250000,500000,1000000,2000000,3000000 --fast "
 
 rule prokka:
