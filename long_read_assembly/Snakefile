@@ -1,0 +1,158 @@
+import os
+
+'''
+basic steps:
+0.basecall - albacore (must be installed manually)
+1.assemble - canu
+2.polish
+ a.racon
+ b.nanopolish
+'''
+
+localrules: nanopolish_ranges, nanopolish_index_fofn
+
+
+sample = config['sample_name']
+fast5_dirs = [l.strip() for l in open(config['fast5_dirs_list'], 'r').readlines()]
+fast5_abspath_run_subfolder = {}
+
+for d in fast5_dirs:
+	run_subfolder = "/".join([d.split("/")[::-1][2], d.split("/")[::-1][0]])
+	fast5_abspath_run_subfolder[run_subfolder] = d
+
+rule all:
+	input:
+		'{samp}/{samp}.fa'.format(samp = sample),
+		fast5_dirs
+
+rule basecall:
+	input: lambda wildcards: fast5_abspath_run_subfolder["/".join([wildcards.run, wildcards.subfolder])]
+	output: '{sample}/0.basecall/raw_calls/{run}/{subfolder}/sequencing_summary.txt'
+	threads: 4
+	shell:
+		"read_fast5_basecaller.py -t {{threads}} -f {fc} -k {k} ".format(fc=config['flowcell'], k = config['kit']) +
+		" --save_path {sample}/0.basecall/raw_calls/{wildcards.run}/{wildcards.subfolder}/ " +
+		"-i {input} --output_format fastq"
+
+rule basecall_final:
+	input: expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
+	output: '{sample}/0.basecall/{sample}.fq'
+	shell:
+		"find {{sample}}/0.basecall/raw_calls/*/workspace/pass/*.fastq | xargs cat > {output}"
+
+rule assemble:
+	input: rules.basecall_final.output
+	output: '{sample}/1.assemble/{sample}_canu.fa'
+	threads: 32
+	shell:
+		"nohup canu -p {sample} -d {sample}/1.assemble/ -nanopore-raw {input} " +
+		"useGrid=False stopOnReadQuality=false genomeSize={{config['genome_size']}}; " +
+		"ln -s {sample}/1.assemble/{sample}.contigs.fasta {output}"
+
+rule align_paf:
+	input:
+		'{ref}.fa',
+		'{sample}/0.basecall/{sample}.fq'.format(sample = sample)
+	output:
+		"{ref}.paf"
+	threads: 32
+	shell:
+		"minimap2 -t {threads} -ax map-ont {input} > {output}"
+
+rule align_bam:
+	input:
+		'{ref}.fa',
+		'{sample}/0.basecall/{sample}.fq'.format(sample = sample)
+	output:
+		"{ref}.bam"
+	threads: 32
+	shell:
+		"minimap2 -t {threads} -ax map-ont {input} | samtools sort --threads {threads} > {output}"
+
+
+rule racon1:
+	input:
+		'{sample}/0.basecall/{sample}.fq',
+		"{sample}/1.assemble/{sample}_canu.paf",
+		rules.assemble.output
+	output:
+		'{sample}/2.racon/1/{sample}_racon1.fa'
+	threads: 32
+	shell:
+		"racon -t {threads} {input} > {output}"
+
+rule racon2:
+	input:
+		rules.racon1.output,
+		'{sample}/0.basecall/{sample}.fq',
+		"{sample}/2.racon/1/{sample}_racon1.paf"
+	output:
+		'{sample}/2.racon/2/{sample}_racon2.fa'
+	threads: 32
+	shell:
+		"racon -t {threads} {input} > {output}"
+
+rule racon3:
+	input:
+		rules.racon2.output,
+		'{sample}/0.basecall/{sample}.fq',
+		"{sample}/2.racon/2/{sample}_racon2.paf"
+	output:
+		'{sample}/2.racon/3/{sample}_racon3.fa'
+	threads: 32
+	shell:
+		"racon -t {threads} {input} > {output}"
+
+rule bam_idx:
+	input:
+		'{some}.bam'
+	output:
+		'{some}.bam.bai'
+	shell:
+		"samtools index {input}"
+
+rule nanopolish_index_fofn:
+	input: expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
+	output: "{sample}/3.nanopolish/seq_summ_fofn.list"
+	run:
+		open({output}, 'w').write("\n".join({input})).close()
+
+rule nanopolish_index:
+	input:
+		"{sample}/3.nanopolish/seq_summ_fofn.list",
+		fast5_dirs,
+		rules.basecall_final.output,
+	output:
+		rules.basecall_final.output[0] + '.index'
+	resources:
+		time=48
+	shell:
+		"nanopolish index --verbose -f {input[0]} -d {' -d '.join(input[1])} input[2]"
+
+rule nanopolish_ranges:
+	input: rules.racon3.output
+	output: dynamic('{sample}/3.nanopolish/ranges/{range}')
+	shell:
+		"nanopolish_makerange.py {input} | xargs -n 1 -I foo touch 3.nanopolish/ranges/foo"
+
+rule nanopolish:
+	input:
+		'{sample}/3.nanopolish/ranges/{range}',
+		rules.basecall_final.output,
+		'{sample}/2.racon/3/{sample}_racon3.bam',
+		rules.racon3.output,
+		'{sample}/2.racon/3/{sample}_racon3.bam.bai',
+		rules.nanopolish_index.output,
+	output:
+		"{sample}/3.nanopolish/range_vcfs/{sample}_{range}.vcf"
+	shell:
+		"nanopolish variants --consensus -o {output} -w {input[0]} -r {input[1]} " +
+		"-b {input[2]} -g {input[3]} --min-candidate-frequency 0.1"
+
+rule nanopolish_final:
+	input: dynamic(rules.nanopolish.output)
+	output: "{sample}/3.nanopolish/{sample}_nanopolish.fa"
+
+rule final:
+	input: rules.nanopolish_final.output
+	output: "{sample}/{sample}.fa"

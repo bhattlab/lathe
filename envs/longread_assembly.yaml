@@ -1,0 +1,9 @@
+name: longread_assembly
+channels:
+  - bioconda
+dependencies:
+  - pilon
+  - nanopolish
+  - canu
+  - racon
+  - minimap2

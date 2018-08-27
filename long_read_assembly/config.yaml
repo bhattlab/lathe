@@ -1,0 +1,5 @@
+sample_name: 'sample'
+fast5_dirs_list: 'fodn.txt' #list of absolute paths to run/fast5/* subfolders containing .fast5 files
+flowcell: 'FLO-MIN106'
+kit: 'SQK-LSK109'
+genome_size: '50m'
