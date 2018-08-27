@@ -3,13 +3,13 @@ require(circlize)
 output = snakemake@output[[1]]
 pdf(output, width = 8, height = 8)#, res = 300, units = 'in', type = 'cairo')
 
-dark.contigs = read.table(snakemake@input[[2]])
-colnames(dark.contigs) = c('assembly', 'condition', 'timepoint', 'contig')
-
 #rRNA
 highlight = read.table(snakemake@input[[3]])
-highlight.intensities = read.table(snakemake@input[[4]])
-
+highlight.intensities = tryCatch({
+	read.table(snakemake@input[[4]])
+	},
+	error = function(cond) {return(matrix(ncol=2, nrow = 0))}
+)
 #contig alignments
 contig.alignments = unlist(snakemake@input)[5:length(snakemake@input)]
 timepoint = sapply(contig.alignments, function(x) strsplit(strsplit(basename(x), '\\.')[[1]][1], '_')[[1]][2])
@@ -17,8 +17,19 @@ condition = sapply(contig.alignments, function(x) strsplit(strsplit(basename(x),
 
 contig.alignments = data.frame(contig.alignments, timepoint, condition)
 
-dark.contigs = merge(dark.contigs, contig.alignments)
 
+dark.contigs = tryCatch({
+		read.table(snakemake@input[[2]])
+	},
+	error = function(cond){
+		return(matrix(ncol=4, nrow = 0))
+	}
+)
+colnames(dark.contigs) = c('assembly', 'condition', 'timepoint', 'contig')
+
+if (nrow(dark.contigs)!=0){
+	dark.contigs = merge(dark.contigs, contig.alignments)
+}
 
 #genome
 genome = read.table(snakemake@input[[1]])
@@ -28,6 +39,7 @@ highlight_size = 1.2
 tick.interval = 0.5e6
 track.height = 0.1
 contig.alpha = 0.3
+highlight_offset = 1.2
 
 color1 = "#241E1E"
 color2 = "#557BB8"
@@ -84,7 +96,12 @@ for (tp in unique(timepoint)){
 		circos.genomicRect(region, value, col = col, border = "white", ytop = i + contig_height, ybottom = i - contig_height, ...)
 
 		#endarken darker contigs
-		to_darken = which(as.character(value[,1]) %in% as.character(dark.contigs$contig[dark.contigs$timepoint == tp]))
+		if (nrow(dark.contigs) != 0){
+			to_darken = which(as.character(value[,1]) %in% as.character(dark.contigs$contig[dark.contigs$timepoint == tp]))
+		}
+		else{
+			to_darken= which(value[,1] %in% value[,1])
+		}
 		region.dark = region[to_darken,]
 		value.dark = value[to_darken,]
 
@@ -121,21 +138,29 @@ if (length(strsplit(as.character(highlight[1,3]), ';')[[1]]) > 1){
 }
 
 
-print(head(highlight))
-print(head(highlight.intensities))
-print(timepoint)
+#print(head(highlight))
+#print(head(highlight.intensities))
+#print(timepoint)
 colnames(highlight) = c('Ref.contig', 'Coord', 'Highlight.seq', 'Group.member')
-colnames(highlight.intensities) = c('Highlight.seq', unique(sort(timepoint)))
 
-#intensities over 1 are reduced to 1
-highlight.intensities[,-c(1)][highlight.intensities[,-c(1)]>1] = 1
+if (nrow(highlight.intensities) > 0){
+	colnames(highlight.intensities) = c('Highlight.seq', unique(sort(timepoint)))
+	#intensities over 1 are reduced to 1
+	#highlight.intensities[,-c(1)][highlight.intensities[,-c(1)]>1] = 1
+	highlight.intensities[,-c(1)] = highlight.intensities[,-c(1)] / max(highlight.intensities[,-c(1)])
+}
 
 #HIGHLIGHTED SEQUENCES
 for (tp in sort(unique(timepoint))){
-	highlight.merge = merge(highlight, highlight.intensities)
-	highlight.merge = highlight.merge[,c(-1)]
-	highlight.merge = highlight.merge[c(1,2,which(colnames(highlight.merge) == tp),3)]
+	if (nrow(highlight.intensities) > 0){
+		highlight.merge = merge(highlight, highlight.intensities)
+		highlight.merge = highlight.merge[,c(-1)]
+		highlight.merge = highlight.merge[c(1,2,which(colnames(highlight.merge) == tp),3)]
+	}
+	else
+		highlight.merge = highlight
 
+	#print(head(highlight))
 	highlight.merge$Group.member = factor(highlight.merge$Group.member)
 	levels(highlight.merge$Group.member) = c(TRUE, FALSE)
 
@@ -143,17 +168,22 @@ for (tp in sort(unique(timepoint))){
 		highlight.merge[highlight.merge$Group.member == TRUE,],
 		highlight.merge[highlight.merge$Group.member == FALSE,]
 	)
-
-	circos.genomicTrackPlotRegion(bedlist, stack = FALSE, bg.border = NA, track.height = track.height, ylim = c(0,1), panel.fun =function(region, value, ...) {
+	#print(bedlist)
+	circos.genomicTrackPlotRegion(bedlist[[1]], stack = FALSE, bg.border = NA, track.height = track.height, ylim = c(0,1), panel.fun =function(region, value, ...) {
 		i = getI(...)
 		color = highlight.colors[i]
 
 		data = region[region[,2] >= 0,]
-		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 1, col = color, cex = highlight_size)
-		circos.points(data[,1], rep(length(unique(timepoint)) + 2.5, nrow(data)), pch = 16, col = color, cex = (1-data[,2]) * highlight_size)
+		circos.points(data[,1], rep(length(unique(timepoint)) + highlight_offset , nrow(data)), pch = 1, col = color, cex = highlight_size)
+		circos.points(data[,1], rep(length(unique(timepoint)) + highlight_offset , nrow(data)), pch = 16, col = color, cex = (data[,2]) * highlight_size)
 
 		no_data = region[region[,2] < 0,]
-		circos.points(no_data[,1], rep(length(unique(timepoint)) + 2.5, nrow(no_data)), pch = 4, col = color, cex = highlight_size)
+		circos.points(no_data[,1], rep(length(unique(timepoint)) + highlight_offset , nrow(no_data)), pch = 4, col = color, cex = highlight_size)
+
+		if (nrow(highlight.intensities) == 0){
+			data = region
+			circos.points(data[,1], rep(length(unique(timepoint)) + highlight_offset, nrow(data)), pch = 16, col = color, cex = highlight_size)
+		}
 	})
 }
 
