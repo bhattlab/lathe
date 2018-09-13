@@ -3,3 +3,5 @@ fast5_dirs_list: 'fodn.txt' #list of absolute paths to run/fast5/* subfolders co
 flowcell: 'FLO-MIN106'
 kit: 'SQK-LSK109'
 genome_size: '50m'
+grid_options: '--time=6:00:00 --account asbhatt'
+usegrid: 'False' #should canu use the grid?

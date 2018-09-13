@@ -1,11 +1,24 @@
 name: longread_assembly
 channels:
   - bioconda
+  - biobuilds
+  - intel
 dependencies:
+  - python>3.5
   - pilon
-  - nanopolish
-  - canu
-  - racon
+  - nanopolish=0.10.1
   - minimap2
-  - snakemake
   - circlator
+  - canu=1.7.1
+  - samtools
+  - biopython
+  - pip
+  - pip:
+      - snakemake
+
+
+#versions are pinned only to force the newest one.  these will need to be updated manually.
+
+  #medaka must be installed manually at present with pip install . from the source folder
+#  - ont-tombo #tombo is installed in its own environment
+#- racon is no longer used

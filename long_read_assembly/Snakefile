@@ -5,32 +5,49 @@ basic steps:
 0.basecall - albacore (must be installed manually)
 1.assemble - canu
 2.polish
- a.racon
+ #a.racon #replaced with medaka
  b.nanopolish
+ *c.miyagi
+ d.medaka
+3. methylation
+	a.tombo
+	b.nanopolish
+
+A note on the below implementation: a few of the nanopolish rules, specifically those
+involving dynamic inputs/outputs required by nanopolish_makerange.py, don't rely on Snakemake
+to resolve the sample wildcard, instead specifying it with the sample variable below.  This is
+because dynamic rule resolution does a file tree traversal, which is prohitively slow if a fast5
+directory is anywhere below the current execution folder.
 '''
 
-localrules: nanopolish_ranges, nanopolish_index_fofn, basecall_final, assemble_final, bam_idx
+localrules: basecall_final, assemble, assemble_final
 
 
 sample = config['sample_name']
 fast5_dirs = [l.strip() for l in open(config['fast5_dirs_list'], 'r').readlines()]
 fast5_abspath_run_subfolder = {}
+fast5_run_subfolder_abspath = {}
 
 for d in fast5_dirs:
 	run_subfolder = "/".join([d.split("/")[::-1][2], d.split("/")[::-1][0]])
 	fast5_abspath_run_subfolder[run_subfolder] = d
+	fast5_run_subfolder_abspath[d] = run_subfolder
 
 rule all:
 	input:
-		'{samp}/{samp}.fa'.format(samp = sample),
-		'{samp}/4.methylation/{samp}_methylation_dsm.tsv'.format(samp = sample),
-		'{samp}/4.methylation/{samp}_methylation_dam.tsv'.format(samp = sample),
-		fast5_dirs
+#		'{sample}/3.circlator/out/06.fixstart.fasta'.format(sample = sample), #circlize
+		'{sample}/4.tombo/readstats.6mA.tombo.per_read_stats'.format(sample=sample).format(sample = sample), #tombo
+#		'{sample}/4.methylation/{sample}-{methylation_type}.tsv'.format(sample = sample, methylation_type = 'dcm'),
+	#	'{sample}/4.methylation/{sample}-{methylation_type}.tsv'.format(sample = sample, methylation_type = 'dam'),
+		#"{sample}/3.nanopolish/{sample}_nanopolish.fa".format(sample = sample),
 
 rule basecall:
 	input: lambda wildcards: fast5_abspath_run_subfolder["/".join([wildcards.run, wildcards.subfolder])]
 	output: '{sample}/0.basecall/raw_calls/{run}/{subfolder}/sequencing_summary.txt'
 	threads: 4
+	resources:
+		time=4,
+		mem=12
 	shell:
 		"read_fast5_basecaller.py -t {{threads}} -f {fc} -k {k} ".format(fc=config['flowcell'], k = config['kit']) +
 		" --save_path {sample}/0.basecall/raw_calls/{wildcards.run}/{wildcards.subfolder}/ " +
@@ -42,16 +59,29 @@ rule basecall_final:
 	shell:
 		"find {sample}/0.basecall/raw_calls/*/*/workspace/pass/*.fastq | xargs cat > {output}"
 
+rule nanoplot:
+	input: rules.basecall_final.output
+	output: '{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'
+	conda: "envs/nanoplot.yaml"
+	resources:
+		time=4
+	threads: 12
+	shell: "NanoPlot --fastq {input} -t {threads} --color green  -o " + "{s}/0.basecall/nanoplots".format(s = sample)
+
 rule assemble:
 	input: rules.basecall_final.output
 	output:'{sample}/1.assemble/{sample}.contigs.fasta'
-	threads: 16
+	threads: 1
 	resources:
-		mem=48,
-		time=8
+		mem=1,
+		time=1
 	shell:
-		"canu -p {sample} -d {sample}/1.assemble/ -nanopore-raw {input} maxThreads={threads} " +
-		"useGrid=False stopOnReadQuality=false genomeSize={size}".format(size=config['genome_size'])
+		"canu -p {sample} -d {sample}/1.assemble/ -nanopore-raw {input} " +
+		"stopOnReadQuality=false genomeSize={size} ".format(size=config['genome_size']) +
+		"useGrid={grid} gnuplotTested=true gridOptions='{opts}'".format(
+			grid = config['usegrid'],
+			opts = config['grid_options']
+		) #maxThreads={threads}
 
 rule assemble_final:
 	input: rules.assemble.output
@@ -79,46 +109,6 @@ rule align_bam:
 	shell:
 		"minimap2 -t {threads} -ax map-ont {input} | samtools sort --threads {threads} > {output}"
 
-
-rule racon1:
-	input:
-		'{sample}/0.basecall/{sample}.fq',
-		"{sample}/1.assemble/{sample}_canu.paf",
-		rules.assemble_final.output
-	output:
-		'{sample}/2.racon/1/{sample}_racon1.fa'
-	threads: 16
-	resources:
-		mem=24
-	shell:
-		"racon -t {threads} {input} > {output}"
-
-rule racon2:
-	input:
-		'{sample}/0.basecall/{sample}.fq',
-		"{sample}/2.racon/1/{sample}_racon1.paf",
-		rules.racon1.output
-	output:
-		'{sample}/2.racon/2/{sample}_racon2.fa'
-	threads: 16
-	resources:
-		mem=24
-	shell:
-		"racon -t {threads} {input} > {output}"
-
-rule racon3:
-	input:
-		'{sample}/0.basecall/{sample}.fq',
-		"{sample}/2.racon/2/{sample}_racon2.paf",
-		rules.racon2.output
-	output:
-		'{sample}/2.racon/3/{sample}_racon3.fa'
-	threads: 16
-	resources:
-		mem=24
-	shell:
-		"racon -t {threads} {input} > {output}"
-
 rule bam_idx:
 	input:
 		'{some}.bam'
@@ -127,9 +117,131 @@ rule bam_idx:
 	shell:
 		"samtools index {input}"
 
+rule medaka:
+	input:
+		rules.basecall_final.output,
+		rules.assemble_final.output,
+	output: '{sample}/2.medaka/{sample}_medaka.fa'
+	threads: 8
+	resources:
+		mem=16,
+		time=24
+	shell:
+		'export VIRTUAL_ENV_DISABLE_PROMPT=1; source /labs/asbhatt/moss/tools/long_read/medaka-0.3.0/venv/bin/activate; ' +
+		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.medaka -t {threads};' +
+		'ln -s consensus.fasta {sample}/2.medaka/{sample}_medaka.fa; ' +
+		'deactivate'
+
+rule circlize_assembly:
+	input: rules.medaka.output
+	output: '{sample}/3.circlator/out/06.fixstart.fasta'
+	threads: 16
+	resources:
+		time=12,
+		mem=32
+	shell:
+		'rmdir {sample}/3.circlator/out/; circlator all --verbose --threads {threads} --assembler canu ' +
+		' --merge_min_id 85 --merge_breaklen 1000 ' +
+		"--data_type nanopore-corrected --bwa_opts '-x ont2d' --merge_min_length 500 " +
+		'{input} {sample}/1.assemble/{sample}.correctedReads.fasta.gz {sample}/3.circlator/out'
+
+rule tombo_annotate:
+	input: rules.medaka.output
+	output: '{sample}/4.tombo/0.annotate/{dir}_ANNOTATED'
+	threads: 4
+	resources:
+		time=lambda wildcards, attempt: 1 * (2**(attempt - 1)),
+		mem=8
+	params:
+		dir_to_annotate = lambda wildcards: fast5_abspath_run_subfolder[wildcards.dir.replace('___', '/')],
+		f1 = lambda wildcards: wildcards.dir.split('___')[0],
+		f2 = lambda wildcards: wildcards.dir.split('___')[1]
+	shell:
+		"source activate tombo && " +
+		"tombo preprocess annotate_raw_with_fastqs --fast5-basedir {params.dir_to_annotate} " +
+		"--fastq-filenames $(ls {sample}/0.basecall/raw_calls/{params.f1}/{params.f2}/workspace/pass/*.fastq) " +
+	 	"--sequencing-summary-filenames $(ls {sample}/0.basecall/raw_calls/{params.f1}/{params.f2}/sequencing_summary.txt) " +
+	 	"--processes {threads} && touch {output}"
+
+rule tombo_resquiggle:
+	input:
+		rules.medaka.output,
+		'{sample}/4.tombo/0.annotate/{dir}_ANNOTATED'
+	output: '{sample}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED'
+	threads: 4
+	resources:
+		time=lambda wildcards, attempt: 1 * (2**(attempt - 1)),
+		mem=8
+	params:
+		dir_to_squiggle = lambda wildcards: fast5_abspath_run_subfolder[wildcards.dir.replace('___', '/')]
+	shell:
+		"source activate tombo; " +
+		"tombo resquiggle {params.dir_to_squiggle} " +
+		"{input[0]} --processes {threads} --num-most-common-errors 5 && touch {output}"
+
+rule tombo_detect:
+	input: expand('{{sample}}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED', dir = [d.replace('/', '___') for d in fast5_abspath_run_subfolder])
+	output:
+		'{sample}/4.tombo/readstats.6mA.tombo.per_read_stats',
+		'{sample}/4.tombo/readstats.5mC.tombo.per_read_stats'
+	threads: 24
+	resources:
+		mem=lambda wildcards, attempt: 32 * attempt,
+		time=lambda wildcards, attempt: 24 * attempt
+	params:
+		fast5_dirs = [d for d in fast5_abspath_run_subfolder]
+	shell:
+		"source activate tombo && " +
+		"tombo detect_modifications alternative_model --fast5-basedirs {params.fast5_dirs} " +
+	 	"--statistics-file-basename {sample}/4.tombo/stats " +
+	 	"--per-read-statistics-basename {sample}/4.tombo/readstats " +
+	 	"--alternate-bases 5mC 6mA --processes {threads}"
+'''
+rule tombo_final:
+
+shell:
+
+	#separate out all tigs into fastas
+	cat ../2.medaka/pcopri_test_medaka.fa.fai | cut -f1 | xargs -n1 -I foo -P 8 sh -c 'samtools faidx ../2.medaka/pcopri_test_medaka.fa foo > tigs/foo.fa'
+
+	source activate tombo
+	tombo text_output signif_sequence_context --statistics-filename stats.5mC.tombo.stats \
+	--genome-fasta ../2.medaka/pcopri_test_medaka.fa --num-bases 6 --num-regions 500000 \
+	--sequences-filename tombo.5mC.flanks.fa
+
+
+#	tombo text_output browser_files --file-type fraction --statistics-filename stats.5mC.tombo.stats
+
+
+	#and above for 6mA
+	#samtools faidx ../2.medaka/pcopri_test_medaka.fa
+	cut -f1 ../2.medaka/pcopri_test_medaka.fa.fai | xargs -n 1 -I foo sh -c "grep foo -A1 tombo.5mC.flanks.fa | grep -v '\-\-' > per_tig/foo_sites.fa"
+	cut -f1 ../2.medaka/pcopri_test_medaka.fa.fai | xargs -n 1 -I foo sh -c "samtools faidx ../2.medaka/pcopri_test_medaka.fa foo > whole_tigs/foo.fa"
+
+	ls per_tig | grep tig | xargs -n 1 -I foo -P 8 sh -c  "\
+	jellyfish count -C per_tig/foo -m 6 -s 10000 -o jellyfish/db/foo.jf; \
+	jellyfish dump jellyfish/db/foo.jf --tab --column | sort -k1,1 > jellyfish/tsv/foo.tsv
+	"
+	join_several jellyfish/tsv/* | bash > jellyfish/joined_methyl.tsv
+
+	ls whole_tigs | grep tig | xargs -n 1 -I foo -P 8 sh -c  "\
+	jellyfish count -C whole_tigs/foo -m 6 -s 10000 -o jellyfish/db/foo.jf; \
+	jellyfish dump jellyfish/db/foo.jf --tab --column | sort -k1,1 > jellyfish/whole_tsv/foo.tsv
+	"
+	join_several jellyfish/whole_tsv/* | bash > jellyfish/joined_whole.tsv
+
+	join_several jellyfish/*tsv/* | bash > jellyfish/all.tsv
+
+
+rule meme:
+	meme -oc blar.meme -dna -mod zoops tombo.5mC.flanks.fa -p 16 -nmotifs 8 -maxw 14 -maxsize 10000000
+
+'''
 rule nanopolish_index_fofn:
-	input: expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
-	output: "{sample}/3.nanopolish/seq_summ_fofn.list"
+	input:
+		expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
+	output:
+		"{sample}/3.nanopolish/seq_summ_fofn.list"
 	run:
 		f = open(output[0], 'w')
 		f.write("\n".join(input))
@@ -137,9 +249,9 @@ rule nanopolish_index_fofn:
 
 rule nanopolish_index:
 	input:
-		"{sample}/3.nanopolish/seq_summ_fofn.list",
+		rules.nanopolish_index_fofn.output,
 		fast5_dirs,
-		rules.basecall_final.output,
+		rules.basecall_final.output
 	output:
 		rules.basecall_final.output[0] + '.index'
 	resources:
@@ -147,19 +259,37 @@ rule nanopolish_index:
 	shell:
 		"nanopolish index --verbose -f {{input[0]}} -d {blar} {{input[2]}}".format(blar = " -d ".join(fast5_dirs))
 
-rule nanopolish_ranges:
-	input: rules.racon3.output
-	output: dynamic('{sample}/3.nanopolish/ranges/{range}')
+rule nanopolish_call_methylation:
+	input:
+		'{sample}/0.basecall/{sample}.fq',
+		'{sample}/2.medaka/{sample}_medaka.bam',
+		rules.medaka.output,
+		rules.nanopolish_index.output
+	output:
+		'{sample}/4.methylation/{sample}-{methylation_type}.tsv'
+	threads: 24
+	resources:
+		time=24,
+		mem=24
 	shell:
-		"nanopolish_makerange.py {input} | xargs -n 1 -I foo touch {sample}/3.nanopolish/ranges/foo"
+		"nanopolish call-methylation --reads {input[0]} --bam {input[1]} --genome {input[2]}" +
+		"--threads {threads} --methylation {wildcards.methylation_type} > {output}"
+
+rule nanopolish_ranges:
+	input:
+		'{sample}/2.medaka/{sample}_medaka.fa'.format(sample = sample)
+	output:
+		dynamic(sample + '/3.nanopolish/ranges/{range}')
+	shell:
+		"nanopolish_makerange.py {{input}} | xargs -n 1 -I foo touch {s}/3.nanopolish/ranges/foo".format(s = sample)
 
 rule nanopolish:
 	input:
 		'{sample}/3.nanopolish/ranges/{range}',
 		rules.basecall_final.output,
-		'{sample}/2.racon/3/{sample}_racon3.bam',
-		rules.racon3.output,
-		'{sample}/2.racon/3/{sample}_racon3.bam.bai',
+		'{sample}/2.medaka/{sample}_medaka.bam',
+		rules.medaka.output,
+		'{sample}/2.medaka/{sample}_medaka.bam.bai',
 		rules.nanopolish_index.output,
 	output:
 		"{sample}/3.nanopolish/range_vcfs/{sample}_{range}.vcf"
@@ -169,36 +299,14 @@ rule nanopolish:
 		mem=16
 	shell:
 		"nanopolish variants --fix-homopolymers --max-haplotypes=10000 " +
-		"--consensus -o {output} -w {input[0]} -r {input[1]} " +
+		"--consensus -o {output} -w {wildcards.range} -r {input[1]} " +
 		"-b {input[2]} -g {input[3]} -t {threads} --min-candidate-frequency 0.1"
 
 rule nanopolish_final:
-	input: dynamic(rules.nanopolish.output)
-	output: "{sample}/3.nanopolish/{sample}_nanopolish.fa"
-
-
-rule nanopolish_call_methylation:
 	input:
-		'{sample}/0.basecall/{sample}.fq',
-		"{sample}/3.nanopolish/{sample}_nanopolish.bam",
-		rules.nanopolish_final.output
+		rules.medaka.output,
+		dynamic(rules.nanopolish.output)
 	output:
-		'{sample}/4.methylation/{sample}_methylation_{methylation_type}.tsv'
-	threads: 24
+		"{sample}/3.nanopolish/{sample}_nanopolish.fa"
 	shell:
-		"nanopolish call-methylation --reads {input[0]} --bam {input[1]} --genome {input[2]}" +
-		"--threads 24 --methylation {methylation_type} > {output}"
-
-rule circlize_assembly:
-	input:
-		rules.nanopolish_final.output,
-		'{sample}/0.basecall/{sample}.fq',
-	output: '{sample}/4.circlator/blar.fa'
-	shell:
-		'circlator all --merge_min_id 85 --merge_breaklen 1000 {input} {sample}/4.circlator/'
-
-rule final:
-	input: rules.nanopolish_final.output
-	output: "{sample}/{sample}.fa"
-	shell:
-		"ln -s 3.nanopolish/{sample}_nanopolish.fa {sample}.fa"
+		"nanopolish vcf2fasta -g {input} > {output}"
