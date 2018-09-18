@@ -25,6 +25,7 @@ assembly_files = [condtp_asm[k] for k in condtp_asm]
 
 rule targets:
 	input:
+		'circos/circos.pdf',
 		config['reference'],
 		config['dark_contigs'],
 		config['highlight_sequences'],
@@ -51,7 +52,7 @@ rule stage_assemblies:
 	output:
 		"assemblies/{f}.fa"
 	shell:
-		"ln -s ../{input} {output}"
+		"ln -s {input} {output}"
 
 #Assembly alignments to reference
 rule assembly_alignment:
@@ -96,7 +97,7 @@ rule bwa_index:
 		time=1
 	threads: 1
 	shell:
-		"ln -s ../{input} bwa_idx/ref.fa; bwa index bwa_idx/ref.fa"
+		"ln -s {input} bwa_idx/ref.fa; bwa index bwa_idx/ref.fa"
 
 
 #16S (highlight sequence) alignments
@@ -110,7 +111,9 @@ rule highlight_alignments:
 		"highlighted/highlights.bed"
 	shell:
 		"bwa mem {input} -a > highlighted/highlights.sam;" +
-		"samtools view highlighted/highlights.sam | grep NM:i:0 | grep XS:i:0| cut -f1,3,4 | sort -u -k1,1 | awk '{{print $2, $3, $3 + 1000, $1}}' > {output}"
+		"samtools view highlighted/highlights.sam -F4 | cut -f1,3,4 | \
+		sort -u -k1,1 | awk '{{print $2, $3, $3 + 1000, $1}}' > {output}" #| cut -f1,3,4 #|awk '{{print $2, $3, $3 + 1000, $1}}' > {output}"
+		##grep NM:i:0 | 
 
 rule circos:
 	conda:
