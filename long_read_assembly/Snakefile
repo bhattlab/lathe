@@ -20,7 +20,8 @@ because dynamic rule resolution does a file tree traversal, which is prohitively
 directory is anywhere below the current execution folder.
 '''
 
-localrules: basecall_final, assemble, assemble_final
+localrules: basecall_final
+
 
 
 sample = config['sample_name']
@@ -35,15 +36,16 @@ for d in fast5_dirs:
 
 rule all:
 	input:
-#		'{sample}/3.circlator/out/06.fixstart.fasta'.format(sample = sample), #circlize
-		'{sample}/4.tombo/readstats.6mA.tombo.per_read_stats'.format(sample=sample).format(sample = sample), #tombo
-#		'{sample}/4.methylation/{sample}-{methylation_type}.tsv'.format(sample = sample, methylation_type = 'dcm'),
+		'{sample}/3.circlator/06.fixstart.fasta'.format(sample = sample), #circlize
+		#'{sample}/4.tombo/readstats.5mC.tombo.per_read_stats'.format(sample=sample).format(sample = sample), #tombo
+		#'{sample}/4.tombo/readstats.6mA.tombo.per_read_stats'.format(sample=sample).format(sample = sample), #tombo
+		#'{sample}/4.nanopolish/{sample}-{methylation_type}.tsv'.format(sample = sample, methylation_type = 'dcm'),
 	#	'{sample}/4.methylation/{sample}-{methylation_type}.tsv'.format(sample = sample, methylation_type = 'dam'),
-		#"{sample}/3.nanopolish/{sample}_nanopolish.fa".format(sample = sample),
+		#"{sample}/4.nanopolish/{sample}_nanopolish.fa".format(sample = sample),
 
 rule basecall:
 	input: lambda wildcards: fast5_abspath_run_subfolder["/".join([wildcards.run, wildcards.subfolder])]
-	output: '{sample}/0.basecall/raw_calls/{run}/{subfolder}/sequencing_summary.txt'
+	output: directory('{sample}/0.basecall/raw_calls/{run}/{subfolder}/workspace/pass/') #sequencing_summary.txt'
 	threads: 4
 	resources:
 		time=4,
@@ -83,11 +85,6 @@ rule assemble:
 			opts = config['grid_options']
 		) #maxThreads={threads}
 
-rule assemble_final:
-	input: rules.assemble.output
-	output: '{sample}/1.assemble/{sample}_canu.fa'
-	shell:
-		"ln -s {sample}.contigs.fasta {output}"
 
 rule align_paf:
 	input:
@@ -120,8 +117,8 @@ rule bam_idx:
 rule medaka:
 	input:
 		rules.basecall_final.output,
-		rules.assemble_final.output,
-	output: '{sample}/2.medaka/{sample}_medaka.fa'
+		rules.assemble.output,
+	output: '{sample}/2.medaka/consensus.fasta'
 	threads: 8
 	resources:
 		mem=16,
@@ -129,24 +126,29 @@ rule medaka:
 	shell:
 		'export VIRTUAL_ENV_DISABLE_PROMPT=1; source /labs/asbhatt/moss/tools/long_read/medaka-0.3.0/venv/bin/activate; ' +
 		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.medaka -t {threads};' +
-		'ln -s consensus.fasta {sample}/2.medaka/{sample}_medaka.fa; ' +
+		#'ln -s consensus.fasta {sample}/2.medaka/{sample}_medaka.fa; ' +
 		'deactivate'
 
-rule circlize_assembly:
+rule circlize:
+#the way canu is run by circlator, it runs out of memory at the bat stage, and there's no way to give it the necessary batMemory=100
 	input: rules.medaka.output
-	output: '{sample}/3.circlator/out/06.fixstart.fasta'
-	threads: 16
+	output: '{sample}/3.circlator/06.fixstart.fasta'
+	threads: 32
 	resources:
-		time=12,
-		mem=32
+		time=48,
+		mem=120
 	shell:
-		'rmdir {sample}/3.circlator/out/; circlator all --verbose --threads {threads} --assembler canu ' +
-		' --merge_min_id 85 --merge_breaklen 1000 ' +
-		"--data_type nanopore-corrected --bwa_opts '-x ont2d' --merge_min_length 500 " +
-		'{input} {sample}/1.assemble/{sample}.correctedReads.fasta.gz {sample}/3.circlator/out'
+		'rmdir {sample}/3.circlator/; ' +
+		'circlator all --verbose --threads {threads} --assembler canu ' +
+		' --merge_min_id 85 --merge_breaklen 1000 --split_all_reads ' #split all reads should be used with canu assembly
+		"--data_type nanopore-corrected --bwa_opts '-x ont2d' " + #"--merge_min_length_merge 500 " +
+		'{input} {sample}/1.assemble/{sample}.correctedReads.fasta.gz {sample}/3.circlator'
 
 rule tombo_annotate:
-	input: rules.medaka.output
+	input:
+		#lambda wildcards: "{s}/0.basecall/raw_calls/{f1}/{f2}/sequencing_summary.txt".format(s = sample, f1 = wildcards.dir.split('___')[0], f2 = wildcards.dir.split('___')[1])
+		#this horrible input specifies the precise basecalling run needed for this batch of reads.  It is simpler to require that all basecalling be complete, but less correct.
+		rules.basecall_final.output
 	output: '{sample}/4.tombo/0.annotate/{dir}_ANNOTATED'
 	threads: 4
 	resources:
@@ -160,53 +162,55 @@ rule tombo_annotate:
 		"source activate tombo && " +
 		"tombo preprocess annotate_raw_with_fastqs --fast5-basedir {params.dir_to_annotate} " +
 		"--fastq-filenames $(ls {sample}/0.basecall/raw_calls/{params.f1}/{params.f2}/workspace/pass/*.fastq) " +
-	 	"--sequencing-summary-filenames $(ls {sample}/0.basecall/raw_calls/{params.f1}/{params.f2}/sequencing_summary.txt) " +
+	 	"--sequencing-summary-filenames {sample}/0.basecall/raw_calls/{params.f1}/{params.f2}/sequencing_summary.txt " +
 	 	"--processes {threads} && touch {output}"
 
 rule tombo_resquiggle:
 	input:
-		rules.medaka.output,
+		rules.circlize.output,
 		'{sample}/4.tombo/0.annotate/{dir}_ANNOTATED'
-	output: '{sample}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED'
+	output:
+		'{sample}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED'
 	threads: 4
 	resources:
 		time=lambda wildcards, attempt: 1 * (2**(attempt - 1)),
 		mem=8
 	params:
-		dir_to_squiggle = lambda wildcards: fast5_abspath_run_subfolder[wildcards.dir.replace('___', '/')]
+		dir_to_squiggle = lambda wildcards: fast5_abspath_run_subfolder[wildcards.dir.replace('___', '/')],
+		index_filename = lambda wildcards: '.' + wildcards.dir.split('___')[1] + '.RawGenomeCorrected_000.tombo.index'
 	shell:
 		"source activate tombo; " +
 		"tombo resquiggle {params.dir_to_squiggle} " +
-		"{input[0]} --processes {threads} --num-most-common-errors 5 && touch {output}"
+		"{input[0]} --processes {threads} --num-most-common-errors 5 && " +
+		"ln -s {params.dir_to_squiggle}/{params.index_filename} {output}"
 
 rule tombo_detect:
 	input: expand('{{sample}}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED', dir = [d.replace('/', '___') for d in fast5_abspath_run_subfolder])
 	output:
-		'{sample}/4.tombo/readstats.6mA.tombo.per_read_stats',
-		'{sample}/4.tombo/readstats.5mC.tombo.per_read_stats'
+		'{sample}/4.tombo/readstats.{methyl}.tombo.per_read_stats'
 	threads: 24
 	resources:
 		mem=lambda wildcards, attempt: 32 * attempt,
 		time=lambda wildcards, attempt: 24 * attempt
 	params:
-		fast5_dirs = [d for d in fast5_abspath_run_subfolder]
+		fast5_dirs = [d for d in fast5_run_subfolder_abspath]
 	shell:
 		"source activate tombo && " +
 		"tombo detect_modifications alternative_model --fast5-basedirs {params.fast5_dirs} " +
 	 	"--statistics-file-basename {sample}/4.tombo/stats " +
 	 	"--per-read-statistics-basename {sample}/4.tombo/readstats " +
-	 	"--alternate-bases 5mC 6mA --processes {threads}"
+	 	"--alternate-bases {wildcards.methyl} --processes {threads} --dna "
 '''
 rule tombo_final:
 
 shell:
 
 	#separate out all tigs into fastas
-	cat ../2.medaka/pcopri_test_medaka.fa.fai | cut -f1 | xargs -n1 -I foo -P 8 sh -c 'samtools faidx ../2.medaka/pcopri_test_medaka.fa foo > tigs/foo.fa'
+	cat ../3.circulator_canu/06.fixstart.fasta.fai | cut -f1 | xargs -n1 -I foo -P 8 sh -c 'samtools faidx ../2.medaka/consensus.fasta foo > tigs/foo.fa'
 
 	source activate tombo
 	tombo text_output signif_sequence_context --statistics-filename stats.5mC.tombo.stats \
-	--genome-fasta ../2.medaka/pcopri_test_medaka.fa --num-bases 6 --num-regions 500000 \
+	--genome-fasta tmp_uniq.fasta --num-bases 6 --num-regions 50000 \
 	--sequences-filename tombo.5mC.flanks.fa
 
 
@@ -215,9 +219,10 @@ shell:
 
 	#and above for 6mA
 	#samtools faidx ../2.medaka/pcopri_test_medaka.fa
-	cut -f1 ../2.medaka/pcopri_test_medaka.fa.fai | xargs -n 1 -I foo sh -c "grep foo -A1 tombo.5mC.flanks.fa | grep -v '\-\-' > per_tig/foo_sites.fa"
-	cut -f1 ../2.medaka/pcopri_test_medaka.fa.fai | xargs -n 1 -I foo sh -c "samtools faidx ../2.medaka/pcopri_test_medaka.fa foo > whole_tigs/foo.fa"
+	cut -f1 ../2.medaka/consensus.fasta.fai | xargs -n 1 -I foo sh -c "grep foo -A1 tombo.5mC.flanks.fa | grep -v '\-\-' > per_tig/foo_sites.fa"
+	cut -f1 ../2.medaka/consensus.fasta.fai | xargs -n 1 -I foo sh -c "samtools faidx ../2.medaka/consensus.fasta foo > whole_tigs/foo.fa"
 
+	module add jellyfish
 	ls per_tig | grep tig | xargs -n 1 -I foo -P 8 sh -c  "\
 	jellyfish count -C per_tig/foo -m 6 -s 10000 -o jellyfish/db/foo.jf; \
 	jellyfish dump jellyfish/db/foo.jf --tab --column | sort -k1,1 > jellyfish/tsv/foo.tsv
@@ -228,9 +233,15 @@ shell:
 	jellyfish count -C whole_tigs/foo -m 6 -s 10000 -o jellyfish/db/foo.jf; \
 	jellyfish dump jellyfish/db/foo.jf --tab --column | sort -k1,1 > jellyfish/whole_tsv/foo.tsv
 	"
-	join_several jellyfish/whole_tsv/* | bash > jellyfish/joined_whole.tsv
+	#join_several jellyfish/whole_tsv/* | bash > jellyfish/joined_whole.tsv
 
-	join_several jellyfish/*tsv/* | bash > jellyfish/all.tsv
+	#join_several jellyfish/*tsv/*.tsv > join.sh
+	#bash ./join.sh > jellyfish/all.tsv
+
+	(head -1 jellyfish/joined_methyl.tsv; sed '1d' jellyfish/joined_methyl.tsv | sort -k1,1 ) > jellyfish/joined_methyl_sorted.tsv
+	(head -1 jellyfish/joined_whole.tsv; sed '1d' jellyfish/joined_whole.tsv | sort -k1,1 )  > jellyfish/joined_whole_sorted.tsv
+
+	join --header jellyfish/joined_methyl_sorted.tsv jellyfish/joined_whole_sorted.tsv | tr ' ' '\t' > jellyfish/all.tsv
 
 
 rule meme:
@@ -241,7 +252,7 @@ rule nanopolish_index_fofn:
 	input:
 		expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
 	output:
-		"{sample}/3.nanopolish/seq_summ_fofn.list"
+		"{sample}/4.nanopolish/seq_summ_fofn.list"
 	run:
 		f = open(output[0], 'w')
 		f.write("\n".join(input))
@@ -250,53 +261,37 @@ rule nanopolish_index_fofn:
 rule nanopolish_index:
 	input:
 		rules.nanopolish_index_fofn.output,
-		fast5_dirs,
+		config['fast5_parent_dir'],
 		rules.basecall_final.output
 	output:
 		rules.basecall_final.output[0] + '.index'
 	resources:
 		time=48
 	shell:
-		"nanopolish index --verbose -f {{input[0]}} -d {blar} {{input[2]}}".format(blar = " -d ".join(fast5_dirs))
-
-rule nanopolish_call_methylation:
-	input:
-		'{sample}/0.basecall/{sample}.fq',
-		'{sample}/2.medaka/{sample}_medaka.bam',
-		rules.medaka.output,
-		rules.nanopolish_index.output
-	output:
-		'{sample}/4.methylation/{sample}-{methylation_type}.tsv'
-	threads: 24
-	resources:
-		time=24,
-		mem=24
-	shell:
-		"nanopolish call-methylation --reads {input[0]} --bam {input[1]} --genome {input[2]}" +
-		"--threads {threads} --methylation {wildcards.methylation_type} > {output}"
+		"nanopolish index --verbose -f {input[0]} -d {input[1]} {input[2]}" #.format(blar = " -d ".join(fast5_dirs))
 
 rule nanopolish_ranges:
 	input:
-		'{sample}/2.medaka/{sample}_medaka.fa'.format(sample = sample)
+		'{sample}/2.medaka/consensus.fasta'.format(sample = sample)
 	output:
-		dynamic(sample + '/3.nanopolish/ranges/{range}')
+		dynamic(sample + '/4.nanopolish/ranges/{range}')
 	shell:
-		"nanopolish_makerange.py {{input}} | xargs -n 1 -I foo touch {s}/3.nanopolish/ranges/foo".format(s = sample)
+		"nanopolish_makerange.py {{input}} | xargs -n 1 -I foo touch {s}/4.nanopolish/ranges/foo".format(s = sample)
 
 rule nanopolish:
 	input:
-		'{sample}/3.nanopolish/ranges/{range}',
+		'{sample}/4.nanopolish/ranges/{range}',
 		rules.basecall_final.output,
-		'{sample}/2.medaka/{sample}_medaka.bam',
+		'{sample}/2.medaka/consensus.bam',
 		rules.medaka.output,
-		'{sample}/2.medaka/{sample}_medaka.bam.bai',
+		'{sample}/2.medaka/consensus.bam.bai',
 		rules.nanopolish_index.output,
 	output:
-		"{sample}/3.nanopolish/range_vcfs/{sample}_{range}.vcf"
-	threads: 8
+		"{sample}/4.nanopolish/range_vcfs/{sample}_{range}.vcf"
+	threads: 1
 	resources:
-		time=8,
-		mem=16
+		time= lambda wildcards, attempt: 4 * attempt,
+		mem=4
 	shell:
 		"nanopolish variants --fix-homopolymers --max-haplotypes=10000 " +
 		"--consensus -o {output} -w {wildcards.range} -r {input[1]} " +
@@ -307,6 +302,22 @@ rule nanopolish_final:
 		rules.medaka.output,
 		dynamic(rules.nanopolish.output)
 	output:
-		"{sample}/3.nanopolish/{sample}_nanopolish.fa"
+		"{sample}/4.nanopolish/{sample}_nanopolish.fa"
 	shell:
 		"nanopolish vcf2fasta -g {input} > {output}"
+
+rule nanopolish_call_methylation:
+	input:
+		'{sample}/0.basecall/{sample}.fq',
+		'{sample}/2.medaka/consensus.bam',
+		rules.medaka.output,
+		rules.nanopolish_index.output
+	output:
+		'{sample}/4.nanopolish/{sample}-{methylation_type}.tsv'
+	threads: 24
+	resources:
+		time=24,
+		mem=24
+	shell:
+		"nanopolish call-methylation --reads {input[0]} --bam {input[1]} --genome {input[2]}" +
+		"--threads {threads} --methylation {wildcards.methylation_type} > {output}"
