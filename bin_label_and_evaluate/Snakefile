@@ -124,7 +124,7 @@ rule checkm:
 		time=24
 	threads: 24
 	shell:
-		"checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm"
+		"rm -rf {samp}/checkm; checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm"
 
 rule aragorn:
 	input:
