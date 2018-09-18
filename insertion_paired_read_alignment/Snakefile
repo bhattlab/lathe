@@ -4,6 +4,7 @@ localrules: stage_is_fasta, stage_assembly_fasta, bwa_index_is_fasta, is_locatio
 
 sample = config['samplename']
 readsdir = os.path.dirname(config['reads1'])
+min_is_coverage = config['min_coverage']
 
 rule all:
 	input:
@@ -11,7 +12,9 @@ rule all:
 		config['reads2'],
 		config['insertion_fasta'],
 		config['assembly_fasta'],
-		"{sample}/is_locations_flanks.fa".format(sample = sample)
+		"{sample}/is_locations_flanks.fa".format(sample = sample),
+		"{sample}/is_locations.coords".format(sample = sample),
+		"{sample}/is_locations.coords.tsv".format(sample = sample)
 
 #set up a symlink for each input fasta
 rule stage_is_fasta:
@@ -108,7 +111,7 @@ rule align_paired_reads_to_assembly:
 rule is_location_bed:
 	conda: "envs/mgwf.yaml"
 	params:
-		threshold = 10,
+		threshold = min_is_coverage,
 		interval = 1000
 	input: "{sample}/is_paired_to_assembly.bam"
 	output: "{sample}/is_locations_abundances.bed"
