@@ -83,7 +83,7 @@ rule align_lr:
 	output:
 		"{samp}/{samp}_lr.bam"
 	resources:
-		mem=16,
+		mem=48,
 		time=6
 	threads: 32
 	shell:
@@ -124,7 +124,7 @@ rule checkm:
 		time=24
 	threads: 24
 	shell:
-		"rm -rf {samp}/checkm; checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm"
+		"checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm"
 
 rule aragorn:
 	input:
@@ -163,7 +163,7 @@ rule quast:
 		mem=8,
 		time=1
 	shell:
-		"quast.py -o {samp}/quast/{bin}.fa/ {input} " +
+		"quast.py -o {output} {input} " +
 		"--contig-thresholds 0,10000,50000,100000,250000,500000,1000000,2000000,3000000 --fast "
 
 rule prokka:
@@ -199,7 +199,7 @@ rule bam_idxstats:
 		"{samp}/{samp}_lr.bam" if long_read else "{samp}/{samp}.bam", #choose a long read alignment or short read alignment,
 		"{samp}/{samp}_lr.bam.bai" if long_read else "{samp}/{samp}.bam.bai", #choose a long read alignment or short read alignment,
 	output:
-		"{samp}/{samp}.bam.bai.tsv"
+		"{samp}/{samp}_lr.bam.bai.tsv" if long_read else "{samp}/{samp}.bam.bai.tsv", #choose a long read alignment or short read alignment,
 	log:
 		"{samp}/logs/bamidxstats.log"
 	resources:
@@ -211,7 +211,7 @@ rule bam_idxstats:
 rule bin_idxstats:
 	input:
 		"{samp}/bins/{bin}.fa",
-		"{samp}/{samp}.bam.bai.tsv"
+		"{samp}/{samp}_lr.bam.bai.tsv" if long_read else "{samp}/{samp}.bam.bai.tsv", #choose a long read alignment or short read alignment,
 	output:
 		"{samp}/coverage/raw/{bin}.tsv"
 	log:
