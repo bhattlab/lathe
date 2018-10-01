@@ -8,17 +8,21 @@ dependencies:
   - pilon
   - nanopolish=0.10.1
   - minimap2
-  - circlator
   - canu=1.7.1
   - samtools
+  - circlator
   - biopython
   - pip
+  - bedtools #used with tombo
+  - bedops #used with tombo
   - pip:
       - snakemake
+      - git+https://github.com/elimoss/circlator.git
 
+#arguments can be snuck to canu through anaconda3/envs/longread_assembly/libexec/bin/canu.defaults
 
 #versions are pinned only to force the newest one.  these will need to be updated manually.
 
-  #medaka must be installed manually at present with pip install . from the source folder
+#medaka must be installed manually at present with pip install . from the source folder
 #  - ont-tombo #tombo is installed in its own environment
 #- racon is no longer used
