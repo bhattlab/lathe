@@ -20,6 +20,8 @@ because dynamic rule resolution does a file tree traversal, which is prohitively
 directory is anywhere below the current execution folder.
 '''
 
+localrules: plasmid_dendro
+
 sample = config['sample_name']
 fast5_dirs = [l.strip() for l in open(config['fast5_dirs_list'], 'r').readlines()]
 fast5_abspath_run_subfolder = {}
@@ -32,9 +34,9 @@ for d in fast5_dirs:
 
 rule all:
 	input:
-		'{sample}/3c.circlator_final/{sample}_circularized.fa'.format(sample = sample)
-#		'{sample}/3.circlator/06.fixstart.fasta'.format(sample = sample), #circlize
-#		'{sample}/3b.circlator_big_tigs/circlator/06.fixstart.fasta'.format(sample = sample),
+		'{sample}/2c.circlator_final/{sample}_circularized.fa'.format(sample = sample)
+#		'{sample}/2.circlator/06.fixstart.fasta'.format(sample = sample), #circlize
+#		'{sample}/2b.circlator_big_tigs/circlator/06.fixstart.fasta'.format(sample = sample),
 		#'{sample}/4.tombo/readstats.5mC.tombo.per_read_stats'.format(sample=sample).format(sample = sample), #tombo
 		#'{sample}/4.tombo/readstats.6mA.tombo.per_read_stats'.format(sample=sample).format(sample = sample), #tombo
 		#'{sample}/4.nanopolish/{sample}-{methylation_type}.tsv'.format(sample = sample, methylation_type = 'dcm'),
@@ -70,13 +72,17 @@ rule nanoplot:
 
 rule assemble:
 	input: rules.basecall_final.output
-	output:'{sample}/1.assemble/{sample}.contigs.fasta'
+	output:
+		'{sample}/1.assemble/{sample}.contigs.fasta',
+		'{sample}/1.assemble/{sample}.correctedReads.fasta.gz'
 	threads: 1
 	resources:
 		mem=1,
 		time=1
 	shell:
 		"canu -p {sample} -d {sample}/1.assemble/ -nanopore-raw {input} " +
+		"corOutCoverage=10000 corMhapSensitivity=high corMinCoverage=0 correctedErrorRate=0.16 " +
+		"cormhapMemory=32 cormhapThreads=4 redMemory=32 oeaMemory=48 batMemory=200 cnsMemory=32 ovlMemory=32 ovlThreads=4 " + #metagenome parameters
 		"stopOnReadQuality=false genomeSize={size} ".format(size=config['genome_size']) +
 		"useGrid={grid} gnuplotTested=true gridOptions='{opts}'".format(
 			grid = config['usegrid'],
@@ -118,90 +124,189 @@ rule faidx:
 	input: '{something}.f{asta}'
 	output: '{something}.f{asta}.fai'
 	shell: "samtools faidx {input}"
-
-
-rule medaka:
-	input:
-		rules.basecall_final.output,
-		rules.assemble.output,
-	output: '{sample}/2.medaka/consensus.fasta'
-	threads: 8
-	resources:
-		mem=16,
-		time=24
-	shell:
-		'export VIRTUAL_ENV_DISABLE_PROMPT=1; source /labs/asbhatt/moss/tools/long_read/medaka-0.3.0/venv/bin/activate; ' +
-		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.medaka -t {threads};' +
-		#'ln -s consensus.fasta {sample}/2.medaka/{sample}_medaka.fa; ' +
-		'deactivate'
-
+'''
 rule circlize:
-	input: rules.medaka.output
-	output: '{sample}/3.circlator/06.fixstart.fasta'
+	input: rules.assemble.output
+	output: '{sample}/2.circlator/06.fixstart.fasta'
 	threads: 16
 	resources:
-		time=60,
-		mem=100
+		time=80,
+		mem=120
 	shell:
-		'rmdir {sample}/3.circlator/; ' +
+		'rmdir {sample}/2.circlator/; ' +
 		'circlator all --verbose --threads {threads} ' +
 		' --merge_min_id 85 --merge_breaklen 4000 --assembler canu ' + #--split_all_reads split all reads may be used with canu assembly
 		"--data_type nanopore-corrected --bwa_opts '-x ont2d' --merge_reassemble_end 50000 " + #"--merge_min_length_merge 500 " +
-		'{input} {sample}/1.assemble/{sample}.correctedReads.fasta.gz {sample}/3.circlator'
-
-rule sanitize_tig_names:
-	input: rules.circlize.output
-	output: "{sample}/3.circlator/sanitized.fa"
-	shell: "cat {input} | sed -r 's/(tig[0-9]{{8}}):[^a-z]*/\\1_/g' | sed 's/_$//g' > {output}"
+		'{input} {sample}/2.circlator'
 
 rule extract_candidate_genome_tigs:
 	input:
-		rules.sanitize_tig_names.output,
-		rules.sanitize_tig_names.output[0] + '.fai'
+		rules.circlize.output,
+		rules.circlize.output[0] + '.fai'
 	output:
-		dynamic("{sample}/3b.circlator_big_tigs/{tigname}.tigname")
+		dynamic("{sample}/2b.circlator_big_tigs/{tigname}.tigname")
 	shell:
 		#"sort -k2,2gr {input[1]} | awk '{{if ($2 > 2000000) print $1}}' > {output}"
 		"sort -k2,2gr {input[1]} | awk '{{if ($2 > 2000000) print $1}}' | " +
-		"xargs -n 1 -I foo sh -c 'echo foo > {sample}/3b.circlator_big_tigs/foo.tigname'"
+		"xargs -n 1 -I foo sh -c 'echo foo > {sample}/2b.circlator_big_tigs/foo.tigname'"
+'''
+
+rule circlator_progcheck:
+	input: rules.assemble.output[0]
+	output: '{sample}/2.circlator/0.progcheck_ok'
+	shell: "circlator progcheck && touch {output}"
+
+rule circlator_mapreads:
+	input: 
+		rules.assemble.output,
+		rules.circlator_progcheck.output
+	output:	"{sample}/2.circlator/1.mapreads.bam"
+	threads: 24
+	resources:
+		time=24,
+		mem=48
+	shell: "circlator mapreads {input} {output} --threads {threads} --bwa_opts '-x ont2d' --verbose"
+
+rule circlator_bam2reads:
+	input: rules.circlator_mapreads.output
+	output: "{sample}/2.circlator/2.bam2reads.fasta"
+	resources:
+		mem=8,
+		time=6
+	shell: "circlator bam2reads --discard_unmapped {input} {wildcards.sample}/2.circlator/2.bam2reads"
+
+rule circlator_assemble:
+	input: rules.circlator_bam2reads.output
+	output: "{sample}/2.circlator/3.assemble/canu.contigs.fasta"
+	threads: 24
+	resources:
+		time=24,
+		mem=180
+	shell: 
+		"circlator assemble --threads {threads} --assembler canu --data_type nanopore-corrected {input} {wildcards.sample}/2.circlator/3.assemble/"
+
+rule circlator_merge:
+	input: 
+		rules.assemble.output,
+		rules.circlator_assemble.output
+	output:
+		"{sample}/2.circlator/4.merge.fasta"
+	threads: 24
+	resources:
+		time=80,
+		mem=180
+	shell: "circlator merge {input[0]} {input[2]} {wildcards.sample}/2.circlator/4.merge " +
+			"--min_id 85 --breaklen 4000 --reassemble_end 50000 --threads {threads} --reads {input[1]} " +
+			"--assembler canu --data_type nanopore-corrected"
+
+rule circlator_clean:
+	input: rules.circlator_merge.output
+	output: "{sample}/2.circlator/5.clean.fasta"
+	resources:
+		time=24,
+		mem=20
+	shell: "circlator clean {input} {wildcards.sample}/2.circlator/5.clean"
+
+rule circlator_fixstart:
+	input: rules.circlator_clean.output
+	output: "{sample}/2.circlator/6.fixstart.fasta"
+	resources:
+		mem=24,
+		time=24
+	shell: "circlator fixstart {input} {wildcards.sample}/2.circlator/6.fixstart"
 
 rule circlize_2mb:
 	input:
-		rules.sanitize_tig_names.output,
+		"{sample}/2.circlator/6.fixstart.fasta"
 		#rules.extract_candidate_genome_tigs.output
-		"{sample}/3b.circlator_big_tigs/{tigname}.tigname"
-	output: '{sample}/3b.circlator_big_tigs/{tigname}/06.fixstart.fasta'
+		"{sample}/2b.circlator_big_tigs/{tigname}.tigname"
+	output: '{sample}/2b.circlator_big_tigs/{tigname}/6.fixstart.fasta'
 	threads: 16
 	resources:
 		time=24,
 		mem=60
 	shell:
-		'rmdir {sample}/3b.circlator_big_tigs/{wildcards.tigname}; ' +
+		'rmdir {sample}/2b.circlator_big_tigs/{wildcards.tigname}; ' +
 		'circlator all --verbose --threads {threads} ' +
 		' --merge_min_id 85 --merge_min_length 1600 --merge_breaklen 4000 --assembler canu ' + #--split_all_reads split all reads may be used with canu assembly
 		"--data_type nanopore-corrected --bwa_opts '-x ont2d' --merge_reassemble_end 50000 " + #"--merge_min_length_merge 500 " +
 		'{input[0]} --b2r_discard_unmapped --b2r_only_contigs {input[1]} ' +
-		'{sample}/1.assemble/{sample}.correctedReads.fasta.gz {sample}/3b.circlator_big_tigs/{wildcards.tigname}/'
+		'{sample}/1.assemble/{sample}.correctedReads.fasta.gz {sample}/2b.circlator_big_tigs/{wildcards.tigname}/'
 
 rule circlize_final:
 	input:
-		rules.sanitize_tig_names.output,
-		#rules.sanitize_tig_names.output[0] + '.fai',
 		dynamic(rules.circlize_2mb.output)
 	output:
-		'{sample}/3c.circlator_final/{sample}_circularized.fa',
-		'{sample}/3c.circlator_final/circularized_contigs.tsv'
+		'{sample}/2c.circlator_final/{sample}_circularized.fa',
+		'{sample}/2c.circlator_final/circularized_contigs.tsv'
 	shell:
-		"cut -f1 {sample}/3.circlator/sanitized.fa.fai > {sample}/3.circlator/sanitized_tigs.list; " + #aggregate sequences non-redundantly
-		"ls {sample}/3b.circlator_big_tigs | grep -v txt > {sample}/3.circlator/recirclized_tigs.list; " +
-		"(grep -vf {sample}/3.circlator/recirclized_tigs.list {sample}/3.circlator/sanitized_tigs.list | " +
-		"xargs samtools faidx {sample}/3.circlator/sanitized.fa > {output[0]}; " +
+		"cut -f1 {sample}/2.circlator/sanitized.fa.fai > {sample}/2.circlator/sanitized_tigs.list; " + #aggregate sequences non-redundantly
+		"ls {sample}/2b.circlator_big_tigs | grep -v txt > {sample}/2.circlator/recirclized_tigs.list; " +
+		"(grep -vf {sample}/2.circlator/recirclized_tigs.list {sample}/2.circlator/sanitized_tigs.list | " +
+		"xargs samtools faidx {sample}/2.circlator/sanitized.fa; " +
+		"cat {input}) > {output[0]}; " +
 
 		#aggregate circularization logs
-		" (grep -P '\\t1' p2-15mo/3.circlator/04.merge.circularise.log; " +
-		"grep -P '\\t1' p2-15mo/3b.circlator_big_tigs/*/04.merge.circularise.log | cut -f2,99 -d ':') " +
+		" (grep -P '\\t1' {sample}/2.circlator/04.merge.circularise.log; " +
+		"grep -P '\\t1' {sample}/2b.circlator_big_tigs/*/04.merge.circularise.log | cut -f2,99 -d ':') " +
 		"| sed -e 's/:[^tig\\t]*/_/g' | sed 's/_\\t/\\t/g' | sort -u > {output[1]}"
 	
+rule medaka:
+	input:
+		rules.basecall_final.output,
+		#rules.circlize_final.output,
+		rules.circlator_fixstart.output
+	output: '{sample}/3.medaka/consensus.fasta'
+	threads: 8
+	resources:
+		mem=16,
+		time=24
+	shell:
+		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/3.medaka -t {threads};' 
+
+		#'export VIRTUAL_ENV_DISABLE_PROMPT=1; source /labs/asbhatt/moss/tools/long_read/medaka-0.3.0/venv/bin/activate; ' ++
+		#'deactivate'
+
+rule align_short_reads:
+	input: 
+		rules.medaka.output,
+		config['short_reads'].split(',')
+	output: "{sample}/3a.pilon/short_reads.bam"
+	threads: 24
+	params: 
+		reads = config['short_reads'].split(',')
+	resources:
+		mem=48,
+		time=24
+	shell:
+		"bwa index {input[0]}; bwa mem -t {threads} {input[0]} {params.reads} | samtools sort --threads {threads} > {output}"
+
+rule pilon:
+	input: 
+		rules.medaka.output,
+		rules.align_short_reads.output,
+		rules.align_short_reads.output[0] + '.bai'
+	output: "{sample}/3a.pilon/{sample}_pilon.fasta"
+	resources:
+		memory=100,
+		time=12
+	threads: 1
+	params:
+		reads=config['short_reads'].split(',')
+	shell:
+		"java -Xmx{resources.memory}G -jar  --genome {input[0]}" +
+		"--unpaired {params.reads} --output {sample}_pilon --outdir {sample}/3a.pilon/ --tracks"
+
+def choose_pilon_or_medaka():
+	if config['short_reads'] != '':
+		return(rules.pilon.output)
+	else:
+		return(rules.medaka.output)
+
+rule sanitize_tig_names:
+	input: choose_pilon_or_medaka()
+	output: "{sample}/3b.final_assembly/{sample}.fa"
+	shell: "cat {input} | sed -r 's/(tig[0-9]{{8}}):[^a-z]*/\\1_/g' | sed 's/_$//g' > {output}"
 
 rule tombo_annotate:
 	input:
@@ -209,7 +314,7 @@ rule tombo_annotate:
 		#this horrible input specifies the precise basecalling run needed for this batch of reads.  It is simpler to require that all basecalling be complete, but less correct.
 		rules.basecall_final.output
 	output: '{sample}/4.tombo/0.annotate/{dir}_ANNOTATED'
-	threads: 4
+	threads: 1
 	resources:
 		time=lambda wildcards, attempt: 1 * (2**(attempt - 1)),
 		mem=8
@@ -219,20 +324,20 @@ rule tombo_annotate:
 		f2 = lambda wildcards: wildcards.dir.split('___')[1]
 	shell:
 		"source activate tombo && " +
-		"tombo preprocess annotate_raw_with_fastqs --fast5-basedir {params.dir_to_annotate} " +
+		"tombo preprocess annotate_raw_with_fastqs --overwrite --fast5-basedir {params.dir_to_annotate} " +
 		"--fastq-filenames $(ls {sample}/0.basecall/raw_calls/{params.f1}/{params.f2}/workspace/pass/*.fastq) " +
 	 	"--sequencing-summary-filenames {sample}/0.basecall/raw_calls/{params.f1}/{params.f2}/sequencing_summary.txt " +
 	 	"--processes {threads} && touch {output}"
 
 rule tombo_resquiggle:
 	input:
-		rules.circlize_final.output,
+		rules.sanitize_tig_names.output,
 		'{sample}/4.tombo/0.annotate/{dir}_ANNOTATED'
 	output:
 		'{sample}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED'
-	threads: 4
+	threads: 1
 	resources:
-		time=lambda wildcards, attempt: 1 * (2**(attempt - 1)),
+		time=lambda wildcards, attempt: 12 * (2**(attempt - 1)),
 		mem=8
 	params:
 		dir_to_squiggle = lambda wildcards: fast5_abspath_run_subfolder[wildcards.dir.replace('___', '/')],
@@ -247,10 +352,10 @@ rule tombo_detect:
 	input: expand('{{sample}}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED', dir = [d.replace('/', '___') for d in fast5_abspath_run_subfolder])
 	output:
 		#'{sample}/4.tombo/readstats.{methyl}.tombo.per_read_stats',
-		'{sample}/4.tombo/stats.{methyl}.tombo.stats'
-	threads: 24
+		protected('{sample}/4.tombo/stats.{methyl}.tombo.stats')
+	threads: 32
 	resources:
-		mem=lambda wildcards, attempt: 32 * attempt,
+		mem=lambda wildcards, attempt: 100 * attempt,
 		time=lambda wildcards, attempt: 24 * attempt
 	params:
 		fast5_dirs = [d for d in fast5_run_subfolder_abspath]
@@ -274,98 +379,96 @@ rule tombo_wig:
 rule tombo_bed_fasta:
 	input: 
 		rules.tombo_wig.output,
-		rules.circlize_final.output,
+		rules.sanitize_tig_names.output,
 	output: 
 		"{sample}/4.tombo/{sample}_{methyl}_sites.bed",
 		"{sample}/4.tombo/{sample}_{methyl}_sites.fa"
 	params:
-		meth_frac = 0.5
+		meth_frac = 0.5,
+		site_radius = 2
 	shell:
 		"cat {input[0]} | wig2bed | " + 
-		"awk '{{if ($5 > {params.meth_frac}) print $1, $2-10, $3+10, $4, $5}}' | " +
+		"awk '{{if ($5 > {params.meth_frac}) print $1, $2-{params.site_radius}, $3+{params.site_radius}, $4, $5}}' | " +
 		"tr ' ' '\\t' | awk '{{if ($2 < 0) print $1, 0, $3, $4, $5; else print $0}}' | tr ' ' '\\t' > {output[0]}; " +
-		"bedtools getfasta -s -fi {input[1]} -bed {output[0]} > {output[1]}"
+		"bedtools getfasta -s -fi {input[1]} -bed {output[0]} | tr -d '()' > {output[1]}"
 
 rule plasmid_kmer_methyl:
-	input: rules.tombo_bed_fasta.output
+	input: 
+		rules.tombo_bed_fasta.output,
+		rules.sanitize_tig_names.output[0] + '.fai'
+	output: dynamic("{sample}/tmp_kmer_methyl_{methyl}/jellyfish/tsv/{tig}.tsv")
+	params:
+		kmer_length = 5
+	shell:
+		"mkdir -p {sample}/tmp_kmer_methyl_{wildcards.methyl}/fa {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/db {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/tsv;\n" +
+		"cut -f1 {input[2]} | xargs -n 1 -I foo sh -c \"grep -A1 foo {input[1]} > {sample}/tmp_kmer_methyl_{wildcards.methyl}/fa/foo_sites.fa\";\n" +
+		"cut -f1 {input[2]} | xargs -n 1 -I foo sh -c \"  \
+jellyfish count -C {sample}/tmp_kmer_methyl_{wildcards.methyl}/fa/foo_sites.fa -m {params.kmer_length} -s 10000 -o {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/db/foo.jf; \
+jellyfish dump {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/db/foo.jf --tab --column | sort -k1,1 > {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/tsv/foo.tsv\";\n "
+
+rule plasmid_kmer_methyl_join:
+	input: dynamic("{sample}/tmp_kmer_methyl_{methyl}/jellyfish/tsv/{tig}.tsv")
 	output: "{sample}/5.assign_plasmids/kmer/methyl_kmers_{methyl}.tsv"
-	# shell:
-	# 	#"cut -f1 ../2.medaka/consensus.fasta.fai | xargs -n 1 -I foo sh -c \"grep foo -A1 methylated_sites.fa | grep -v '\-\-' > per_tig/foo_sites.fa\" " +
-	# 	"jellyfish count -C per_tig/foo -m 6 -s 10000 -o jellyfish/db/foo.jf" +
-	# 	"jellyfish dump jellyfish/db/foo.jf --tab --column | sort -k1,1 > jellyfish/tsv/foo.tsv" +
-	# 	"join_several jellyfish/tsv/* | bash > jellyfish/joined_methyl.tsv" +
-	# 	"(head -1 jellyfish/joined_methyl.tsv; sed '1d' jellyfish/joined_methyl.tsv | sort -k1,1 ) > jellyfish/joined_methyl_sorted.tsv"
+	script:
+		"scripts/join_several2.py" 
 
 rule plasmid_kmer_tig:
-	input: rules.circlize_final.output
-	output: "{sample}/5.assign_plasmids/kmer/tig_kmers.tsv"
-	# shell:
-	# 	#cut -f1 ../2.medaka/consensus.fasta.fai | xargs -n 1 -I foo sh -c "samtools faidx ../2.medaka/consensus.fasta foo > whole_tigs/foo.fa"
-	# 	"cat ../3.circulator_canu/06.fixstart.fasta.fai | cut -f1 | " +
-	# 	"xargs -n1 -I foo -P 8 sh -c 'samtools faidx ../2.medaka/consensus.fasta foo > tigs/foo.fa'" +
-	# 	"jellyfish count -C whole_tigs/foo -m 6 -s 10000 -o jellyfish/db/foo.jf; " +
-	# 	"jellyfish dump jellyfish/db/foo.jf --tab --column | sort -k1,1 > jellyfish/whole_tsv/foo.tsv" +
-	# 	"join_several jellyfish/whole_tsv/* | bash > jellyfish/joined_whole.tsv" +
-	# 	"(head -1 jellyfish/joined_whole.tsv; sed '1d' jellyfish/joined_whole.tsv | sort -k1,1 )  > jellyfish/joined_whole_sorted.tsv"
+	input: 
+		rules.sanitize_tig_names.output[0],
+		rules.sanitize_tig_names.output[0] + '.fai'
+	output: dynamic("{sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/{tig}.tsv")
+	params:
+		kmer_length = 5
+	shell: 
+		"mkdir -p {sample}/tmp_kmer_wholetig/jellyfish/whole_tsv {sample}/tmp_kmer_wholetig/jellyfish/db {sample}/tmp_kmer_wholetig/fa; \n" +
+		"cat {input[1]} | cut -f1 | xargs -n1 -I foo -P 8 sh -c 'samtools faidx {input[0]} foo > {sample}/tmp_kmer_wholetig/fa/foo.fa; \n\
+jellyfish count -C {sample}/tmp_kmer_wholetig/fa/foo.fa -m {params.kmer_length} -s 10000 -o {sample}/tmp_kmer_wholetig/jellyfish/db/foo.jf; \n\
+jellyfish dump {sample}/tmp_kmer_wholetig/jellyfish/db/foo.jf --tab --column | sort -k1,1 > {sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/foo.tsv'; \n"
+		
+rule plasmid_kmer_tig_join:
+	input: dynamic("{sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/{tig}.tsv")
+	output:"{sample}/5.assign_plasmids/kmer/tig_kmers.tsv",
+	script:
+		"scripts/join_several2.py"
+		 
+rule plasmid_dendro_prebin:
+	input:
+		"{sample}/5.assign_plasmids/kmer/methyl_kmers_5mC.tsv",
+		"{sample}/5.assign_plasmids/kmer/methyl_kmers_6mA.tsv",
+		rules.plasmid_kmer_tig.output
+	output:
+		"{sample}/5.assign_plasmids/pre_binning_steps_done"
+	shell:
+		"touch {output}"
 
-rule plasmid_kmer_all:
+rule plasmid_list:
+	input:
+		rules.sanitize_tig_names.output,
+		rules.sanitize_tig_names.output[0] + '.fai'
+	output:	
+		"{sample}/5.assign_plasmids/plasmids.tsv"
+	shell:
+		"cut -f2 {input[1]} | xargs -n 1 -I foo grep foo {input[2]} | awk '{{if ($2 < 1000000) print $0}}' > {output}"
+
+rule plasmid_dendro:
 	input: 
 		"{sample}/5.assign_plasmids/kmer/methyl_kmers_5mC.tsv",
-		rules.plasmid_kmer_tig.output
-	output: "{sample}/5.assign_plasmids/kmer/all_kmers.tsv"
-	# shell:
-	# 	"join --header jellyfish/joined_methyl_sorted.tsv jellyfish/joined_whole_sorted.tsv | tr ' ' '\t' > jellyfish/all.tsv"
-
-rule assign_plasmids:
-	input: 
-		rules.plasmid_kmer_all.output
-		#"{sample}/4.tombo/{sample}_5mC_sites.fa",
-		#"{sample}/4.tombo/{sample}_6mA_sites.fa",
+		"{sample}/5.assign_plasmids/kmer/methyl_kmers_6mA.tsv",
+		"{sample}/5.assign_plasmids/kmer/tig_kmers.tsv",
+		"{sample}/5.assign_plasmids/bin_tig_mapping.tsv",
+		"{sample}/5.assign_plasmids/plasmids.tsv",
+		"{sample}/5.assign_plasmids/species_assignments.tsv",
 	output:
-		"{sample}/5.assign_plasmids/test"
-	# script:
-	# 	'plasmid_dendro.r'
-'''
-rule tombo_final:
-
-shell:
-
-	#separate out all tigs into fastas
-	cat ../3.circulator_canu/06.fixstart.fasta.fai | cut -f1 | xargs -n1 -I foo -P 8 sh -c 'samtools faidx ../2.medaka/consensus.fasta foo > tigs/foo.fa'
-
-	source activate tombo
-#	tombo text_output signif_sequence_context --statistics-filename stats.5mC.tombo.stats \
-#	--genome-fasta tmp_uniq.fasta --num-bases 6 --num-regions 50000 \
-#	--sequences-filename tombo.5mC.flanks.fa
+		"{sample}/5.assign_plasmids/dendro.pdf"
+	script:
+	 	'scripts/plasmid_dendro.R'
 
 
+#could be integrated into binning workflow:
+#ls *.fai | xargs -n 1 -I foo sh -c "cat foo | sed 's/^/foo\t/g'" | sed 's/.fa.fai//g' | cut -f1,2 > ../bin_tig_mapping.tsv
+#cut -f2,49,50 p1.tsv > ../species_assignments.tsv 
 
 
-	#and above for 6mA
-	#samtools faidx ../2.medaka/pcopri_test_medaka.fa
-	cut -f1 ../2.medaka/consensus.fasta.fai | xargs -n 1 -I foo sh -c "grep foo -A1 methylated_sites.fa | grep -v '\-\-' > per_tig/foo_sites.fa"
-	cut -f1 ../2.medaka/consensus.fasta.fai | xargs -n 1 -I foo sh -c "samtools faidx ../2.medaka/consensus.fasta foo > whole_tigs/foo.fa"
-
-	module add jellyfish
-	ls per_tig | grep tig | xargs -n 1 -I foo -P 8 sh -c  "\
-	jellyfish count -C per_tig/foo -m 6 -s 10000 -o jellyfish/db/foo.jf; \
-	jellyfish dump jellyfish/db/foo.jf --tab --column | sort -k1,1 > jellyfish/tsv/foo.tsv
-	"
-	join_several jellyfish/tsv/* | bash > jellyfish/joined_methyl.tsv
-
-	ls whole_tigs | grep tig | xargs -n 1 -I foo -P 8 sh -c  "\
-	jellyfish count -C whole_tigs/foo -m 6 -s 10000 -o jellyfish/db/foo.jf; \
-	jellyfish dump jellyfish/db/foo.jf --tab --column | sort -k1,1 > jellyfish/whole_tsv/foo.tsv
-	"
-	join_several jellyfish/whole_tsv/* | bash > jellyfish/joined_whole.tsv
-
-
-	(head -1 jellyfish/joined_methyl.tsv; sed '1d' jellyfish/joined_methyl.tsv | sort -k1,1 ) > jellyfish/joined_methyl_sorted.tsv
-	(head -1 jellyfish/joined_whole.tsv; sed '1d' jellyfish/joined_whole.tsv | sort -k1,1 )  > jellyfish/joined_whole_sorted.tsv
-
-	join --header jellyfish/joined_methyl_sorted.tsv jellyfish/joined_whole_sorted.tsv | tr ' ' '\t' > jellyfish/all.tsv
-
-'''
 rule nanopolish_index_fofn:
 	input:
 		expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
@@ -406,7 +509,7 @@ rule nanopolish:
 		"{sample}/4.nanopolish/range_vcfs/{sample}_{range}.vcf"
 	threads: 4
 	resources:
-		time= lambda wildcards, attempt: 24 * attempt, #this may be reduced if it incurs scheduling delays
+		time= lambda wildcards, attempt: 48 * attempt, #this may be reduced if it incurs scheduling delays
 		mem=16
 	shell:
 		"nanopolish variants --fix-homopolymers " + #--max-haplotypes=10000 " +
@@ -420,7 +523,7 @@ rule nanopolish_final:
 	output:
 		"{sample}/4.nanopolish/{sample}_nanopolish.fa"
 	shell:
-		"nanopolish vcf2fasta -g {input} > {output}"
+		"nanopolish vcf2fasta -g {input[0]} {sample}/4.nanopolish/range_vcfs/* > {output}"
 
 rule nanopolish_call_methylation:
 	input:
@@ -437,53 +540,3 @@ rule nanopolish_call_methylation:
 	shell:
 		"nanopolish call-methylation --reads {input[0]} --bam {input[1]} --genome {input[2]}" +
 		"--threads {threads} --methylation {wildcards.methylation_type} > {output}"
-
-
-#antibiotic resistance stuff
-
-'''################################################################################
-rule align_carddb:
-    message: """Aligning to CARD db"""
-    input:  com=PROJECT_DIR+"/processed/{sample}_merged.fq",
-            index="/srv/gsfs0/projects/bhatt/data/public_dbs/CARD_abx_db/nucleotide_fasta_protein_homolog_model.fa"
-            #index=PROJECT_DIR+"/card_analyses/fab_refs/fabfam.fa"
-    output: PROJECT_DIR+"/card_analyses/{sample}_alignedbwa.bam.bai"
-    threads: 3
-    params: sample="{sample}",
-        job_name="bwa_card_{sample}",
-        max_time="04:00:00",
-        max_mem="10G"
-    shell: """
-        module load bwa/0.7.10
-        module load samtools
-        bwa mem -t {threads} {input.index} {input.com} | samtools view -h -F4 | samtools sort > \
-            {PROJECT_DIR}/card_analyses/{params.sample}_alignedbwa_fab.sam.bam
-        samtools index {PROJECT_DIR}/card_analyses/{params.sample}_alignedbwa.sam.bam
-    """
-
-# ls -1 *.sam | xargs -n 1 -I foo sh -c "samtools sort foo > foo.bam &"
-# ls -1 *sam.bam | xargs -n 1 -I foo sh -c "samtools index foo &"
-# qlogin -l h_vmem=50G
-# module load bwa
-# module load samtools
-# bwa index -a bwtsw fabfam.fa
-# ls -1 ../processed/*_merged.fq | xargs -n 1 -I foo sh -c "bwa mem -t 4 fabfam.fa foo | samtools sort > foo_alignedbwa_fab.bam &"
-
-
-################################################################################
-rule match_indices_carddb:
-    input:  PROJECT_DIR+"/card_analyses/{sample}_alignedbwa.sam.bam"
-            PROJECT_DIR+"/card_analyses/{sample}_alignedbwa.sam.bam.bai"
-    output: PROJECT_DIR+"/card_analyses/card_merged.tsv"
-    shell: """
-        qlogin -l h_vmem=20G
-        module load samtools
-        module load ruby/2.2.2p95
-        ls {PROJECT_DIR}/card_analyses/ | grep bam | grep -v bai | \
-            xargs -n 1 -I foo sh -c \
-            "samtools idxstats {PROJECT_DIR}/card_analyses/foo | cut -f1,3 \
-                | sort -k1,1 > {PROJECT_DIR}/1.indices/foo.tsv & "
-        {JOINSEV_DIR} *sam.bam.tsv | bash | grep -v '\*' > \
-            {PROJECT_DIR}/card_analyses/card_table.tsv
-        """
-'''

@@ -1,0 +1,27 @@
+#!/usr/bin/env ruby
+
+files = ARGV
+
+cmd = "echo #{files.map{|t| t.split('.').first}.join("\t")} | tr ' ' '\\t'; "
+cmd = cmd + "join -a1 -a2 -e '0' -o '0,1.2,2.2' #{ARGV[0]} #{ARGV[1]} | tr ' ' '\\t' | "
+
+files = files.drop(2)
+counter = 3
+files.each_with_index do |f, i|
+	if i > 0
+		cmd = cmd + '| '
+	end
+	pad = ['']
+	fields_ary = *(2..counter).to_a
+	fields_ary = pad + fields_ary
+	
+	fields_string_1 = (fields_ary).join(",1.").to_s
+
+	cmd = cmd + "\n join -a1 -a2 -e '0' -o '0#{fields_string_1},2.2' - #{f}  | tr ' ' '\\t' "
+	counter += 1
+end
+
+cmd = cmd.delete('[]"')
+
+
+puts cmd

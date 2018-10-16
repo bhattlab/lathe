@@ -1,28 +1,34 @@
-name: longread_assembly
+name: longread_assembly_test
 channels:
   - bioconda
   - biobuilds
   - intel
+  - conda-forge 
 dependencies:
   - python>3.5
   - pilon
   - nanopolish=0.10.1
+  - bwa
   - minimap2
   - canu=1.7.1
   - samtools
-  - circlator
   - biopython
   - pip
+  - jellyfish
   - bedtools #used with tombo
   - bedops #used with tombo
+  - r-vegan 
+  - r-ggplot2
+  - r-plyr
+  - ncurses=6.1
+  - r-factoextra
+  - tensorflow #makes medaka work
   - pip:
       - snakemake
       - git+https://github.com/elimoss/circlator.git
-
-#arguments can be snuck to canu through anaconda3/envs/longread_assembly/libexec/bin/canu.defaults
+      - git+https://github.com/nanoporetech/tombo.git
+      #- git+https://github.com/nanoporetech/medaka.git #this doesn't work.  you'll need to pip install . from the source folder manually.
 
 #versions are pinned only to force the newest one.  these will need to be updated manually.
 
-#medaka must be installed manually at present with pip install . from the source folder
 #  - ont-tombo #tombo is installed in its own environment
-#- racon is no longer used

@@ -4,4 +4,5 @@ flowcell: 'FLO-MIN106'
 kit: 'SQK-LSK109'
 genome_size: '50m'
 grid_options: '--time=6:00:00 --account asbhatt'
-usegrid: 'False' #should canu use the grid?
+usegrid: 'True' #should canu use the grid?
+short_reads: '' #Comma-separated forward and reverse optionally gzipped fastq files.  Optional.  If no reads are given, the pilon step is skipped.
