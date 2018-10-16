@@ -1,12 +1,12 @@
 basecall:
   partition: nih_s10
 assemble:
-  partition: nih_s10
+  partition: batch #nih_s10
 align_bam:
-  partition: batch #nih_s10 #batch
+  partition: nih_s10 #batch
 align_paf:
   partition: batch #nih_s10
 circlize:
   partition: nih_s10
-circlize_2mb:
-  partition: nih_s10
+#circlize_2mb:
+#  partition: nih_s10

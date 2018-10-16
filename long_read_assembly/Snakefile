@@ -73,21 +73,30 @@ rule nanoplot:
 rule assemble:
 	input: rules.basecall_final.output
 	output:
-		'{sample}/1.assemble/{sample}.contigs.fasta',
-		'{sample}/1.assemble/{sample}.correctedReads.fasta.gz'
+		'{sample}/1.assemble_{genome_size}/{sample}_{genome_size}.contigs.fasta',
+		'{sample}/1.assemble_{genome_size}/{sample}_{genome_size}.correctedReads.fasta.gz'
 	threads: 1
 	resources:
 		mem=1,
 		time=1
 	shell:
-		"canu -p {sample} -d {sample}/1.assemble/ -nanopore-raw {input} " +
+		"canu -p {sample}_{wildcards.genome_size} -d {sample}/1.assemble_{wildcards.genome_size}/ -nanopore-raw {input} " +
 		"corOutCoverage=10000 corMhapSensitivity=high corMinCoverage=0 correctedErrorRate=0.16 " +
 		"cormhapMemory=32 cormhapThreads=4 redMemory=32 oeaMemory=48 batMemory=200 cnsMemory=32 ovlMemory=32 ovlThreads=4 " + #metagenome parameters
-		"stopOnReadQuality=false genomeSize={size} ".format(size=config['genome_size']) +
+		"stopOnReadQuality=false genomeSize={wildcards.genome_size} " +
 		"useGrid={grid} gnuplotTested=true gridOptions='{opts}'".format(
 			grid = config['usegrid'],
 			opts = config['grid_options']
 		) #maxThreads={threads}
+
+rule merge:
+	input: expand("{{sample}}/1.assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
+	output: "{sample}/1a.merge/{sample}_merged.fasta"
+	resources:
+		time=6,
+		mem=24
+	shell:
+		"merge_wrapper.py {input} -pre {sample}/1a.merge/{sample}_merged"
 
 rule align_paf:
 	input:
@@ -152,20 +161,22 @@ rule extract_candidate_genome_tigs:
 '''
 
 rule circlator_progcheck:
-	input: rules.assemble.output[0]
+	input: 
+		rules.merge.output
 	output: '{sample}/2.circlator/0.progcheck_ok'
 	shell: "circlator progcheck && touch {output}"
 
 rule circlator_mapreads:
 	input: 
-		rules.assemble.output,
+		rules.merge.output,
+		'{{sample}}/1.assemble_{g}/{{sample}}_{g}.correctedReads.fasta.gz'.format(g = config['genome_size'].split(",")[0]),
 		rules.circlator_progcheck.output
 	output:	"{sample}/2.circlator/1.mapreads.bam"
 	threads: 24
 	resources:
 		time=24,
 		mem=48
-	shell: "circlator mapreads {input} {output} --threads {threads} --bwa_opts '-x ont2d' --verbose"
+	shell: "circlator mapreads {input[0]} {input[1]} {output} --threads {threads} --bwa_opts '-x ont2d' --verbose"
 
 rule circlator_bam2reads:
 	input: rules.circlator_mapreads.output
@@ -187,7 +198,8 @@ rule circlator_assemble:
 
 rule circlator_merge:
 	input: 
-		rules.assemble.output,
+		rules.merge.output,
+		'{{sample}}/1.assemble_{g}/{{sample}}_{g}.correctedReads.fasta.gz'.format(g = config['genome_size'].split(",")[0]),
 		rules.circlator_assemble.output
 	output:
 		"{sample}/2.circlator/4.merge.fasta"
@@ -214,7 +226,7 @@ rule circlator_fixstart:
 		mem=24,
 		time=24
 	shell: "circlator fixstart {input} {wildcards.sample}/2.circlator/6.fixstart"
-
+'''
 rule circlize_2mb:
 	input:
 		"{sample}/2.circlator/6.fixstart.fasta"
@@ -231,7 +243,7 @@ rule circlize_2mb:
 		' --merge_min_id 85 --merge_min_length 1600 --merge_breaklen 4000 --assembler canu ' + #--split_all_reads split all reads may be used with canu assembly
 		"--data_type nanopore-corrected --bwa_opts '-x ont2d' --merge_reassemble_end 50000 " + #"--merge_min_length_merge 500 " +
 		'{input[0]} --b2r_discard_unmapped --b2r_only_contigs {input[1]} ' +
-		'{sample}/1.assemble/{sample}.correctedReads.fasta.gz {sample}/2b.circlator_big_tigs/{wildcards.tigname}/'
+		'{sample}/1.assemble_{g}/{sample}.correctedReads.fasta.gz {sample}/2b.circlator_big_tigs/{wildcards.tigname}/'
 
 rule circlize_final:
 	input:
@@ -250,7 +262,7 @@ rule circlize_final:
 		" (grep -P '\\t1' {sample}/2.circlator/04.merge.circularise.log; " +
 		"grep -P '\\t1' {sample}/2b.circlator_big_tigs/*/04.merge.circularise.log | cut -f2,99 -d ':') " +
 		"| sed -e 's/:[^tig\\t]*/_/g' | sed 's/_\\t/\\t/g' | sort -u > {output[1]}"
-	
+'''
 rule medaka:
 	input:
 		rules.basecall_final.output,
@@ -269,7 +281,7 @@ rule medaka:
 
 rule align_short_reads:
 	input: 
-		rules.medaka.output,
+		rules.circlator_fixstart.output,
 		config['short_reads'].split(',')
 	output: "{sample}/3a.pilon/short_reads.bam"
 	threads: 24
@@ -283,7 +295,7 @@ rule align_short_reads:
 
 rule pilon:
 	input: 
-		rules.medaka.output,
+		rules.circlator_fixstart.output,
 		rules.align_short_reads.output,
 		rules.align_short_reads.output[0] + '.bai'
 	output: "{sample}/3a.pilon/{sample}_pilon.fasta"
@@ -303,7 +315,7 @@ def choose_pilon_or_medaka():
 	else:
 		return(rules.medaka.output)
 
-rule sanitize_tig_names:
+rule final_assembly:
 	input: choose_pilon_or_medaka()
 	output: "{sample}/3b.final_assembly/{sample}.fa"
 	shell: "cat {input} | sed -r 's/(tig[0-9]{{8}}):[^a-z]*/\\1_/g' | sed 's/_$//g' > {output}"
@@ -331,7 +343,7 @@ rule tombo_annotate:
 
 rule tombo_resquiggle:
 	input:
-		rules.sanitize_tig_names.output,
+		rules.final_assembly.output,
 		'{sample}/4.tombo/0.annotate/{dir}_ANNOTATED'
 	output:
 		'{sample}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED'
@@ -379,7 +391,7 @@ rule tombo_wig:
 rule tombo_bed_fasta:
 	input: 
 		rules.tombo_wig.output,
-		rules.sanitize_tig_names.output,
+		rules.final_assembly.output,
 	output: 
 		"{sample}/4.tombo/{sample}_{methyl}_sites.bed",
 		"{sample}/4.tombo/{sample}_{methyl}_sites.fa"
@@ -395,7 +407,7 @@ rule tombo_bed_fasta:
 rule plasmid_kmer_methyl:
 	input: 
 		rules.tombo_bed_fasta.output,
-		rules.sanitize_tig_names.output[0] + '.fai'
+		rules.final_assembly.output[0] + '.fai'
 	output: dynamic("{sample}/tmp_kmer_methyl_{methyl}/jellyfish/tsv/{tig}.tsv")
 	params:
 		kmer_length = 5
@@ -414,8 +426,8 @@ rule plasmid_kmer_methyl_join:
 
 rule plasmid_kmer_tig:
 	input: 
-		rules.sanitize_tig_names.output[0],
-		rules.sanitize_tig_names.output[0] + '.fai'
+		rules.final_assembly.output[0],
+		rules.final_assembly.output[0] + '.fai'
 	output: dynamic("{sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/{tig}.tsv")
 	params:
 		kmer_length = 5
@@ -443,8 +455,8 @@ rule plasmid_dendro_prebin:
 
 rule plasmid_list:
 	input:
-		rules.sanitize_tig_names.output,
-		rules.sanitize_tig_names.output[0] + '.fai'
+		rules.final_assembly.output,
+		rules.final_assembly.output[0] + '.fai'
 	output:	
 		"{sample}/5.assign_plasmids/plasmids.tsv"
 	shell:
@@ -492,7 +504,7 @@ rule nanopolish_index:
 		"nanopolish index --verbose -f {input[0]} -d {input[1]} {input[2]}" #.format(blar = " -d ".join(fast5_dirs))
 
 rule nanopolish_ranges:
-	input: rules.sanitize_tig_names.output
+	input: rules.final_assembly.output
 	output: dynamic('{sample}/4.nanopolish/ranges/{range}')
 	shell:
 		"nanopolish_makerange.py {input} | xargs -n 1 -I foo touch {sample}/4.nanopolish/ranges/foo"
@@ -501,9 +513,9 @@ rule nanopolish:
 	input:
 		'{sample}/4.nanopolish/ranges/{range}',
 		rules.basecall_final.output,
-		rules.sanitize_tig_names.output[0] + '.bam',
-		rules.sanitize_tig_names.output,
-		rules.sanitize_tig_names.output[0] + '.bam.bai',
+		rules.final_assembly.output[0] + '.bam',
+		rules.final_assembly.output,
+		rules.final_assembly.output[0] + '.bam.bai',
 		rules.nanopolish_index.output,
 	output:
 		"{sample}/4.nanopolish/range_vcfs/{sample}_{range}.vcf"
@@ -518,7 +530,7 @@ rule nanopolish:
 
 rule nanopolish_final:
 	input:
-		rules.sanitize_tig_names.output,
+		rules.final_assembly.output,
 		dynamic(rules.nanopolish.output)
 	output:
 		"{sample}/4.nanopolish/{sample}_nanopolish.fa"
@@ -529,7 +541,7 @@ rule nanopolish_call_methylation:
 	input:
 		rules.basecall_final.output,
 		'{sample}/3.circlize/06.fixstart.fasta.bam',
-		rules.sanitize_tig_names.output,
+		rules.final_assembly.output,
 		rules.nanopolish_index.output
 	output:
 		'{sample}/4.nanopolish/{sample}-{methylation_type}.tsv'
