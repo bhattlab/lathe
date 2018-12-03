@@ -4,7 +4,12 @@ output = snakemake@output[[1]]
 pdf(output, width = 8, height = 8)#, res = 300, units = 'in', type = 'cairo')
 
 #rRNA
-highlight = read.table(snakemake@input[[3]])
+highlight = tryCatch({
+	read.table(snakemake@input[[3]])
+	},
+	error = function(cond) {},
+	finally = {draw.highlights = FALSE}
+)
 highlight.intensities = tryCatch({
 	read.table(snakemake@input[[4]])
 	},
@@ -37,7 +42,7 @@ genome = read.table(snakemake@input[[1]])
 #aesthetic knobs
 highlight_size = 1.2
 tick.interval = 0.5e6
-track.height = 0.1
+track.height = 0.5
 contig.alpha = 0.3
 highlight_offset = 1.2
 
@@ -124,51 +129,52 @@ for (tp in unique(timepoint)){
 #highlight[,2] = breaks[cut(highlight[,2], breaks, labels = FALSE)+1]
 #highlight[,3] = highlight[,2] + 1000
 #highlight = unique(highlight)
-
-highlight = highlight[order(highlight[,2]),]
-highlight = cbind(highlight[,c(1,2)], highlight[,4])
-
-
-if (length(strsplit(as.character(highlight[1,3]), ';')[[1]]) > 1){
-	#color the highlights by the first ';' delimited portion of their original sequence names.
-	highlight$type = sapply(highlight[,3], function(x) strsplit(as.character(x), ';')[[1]][1])
-} else {
-	#don't.
-	highlight$type = rep('foo', nrow(highlight))
-}
+if (draw.highlights){
+	highlight = highlight[order(highlight[,2]),]
+	highlight = cbind(highlight[,c(1,2)], highlight[,4])
 
 
-#print(head(highlight))
-#print(head(highlight.intensities))
-#print(timepoint)
-colnames(highlight) = c('Ref.contig', 'Coord', 'Highlight.seq', 'Group.member')
-
-if (nrow(highlight.intensities) > 0){
-	colnames(highlight.intensities) = c('Highlight.seq', unique(sort(timepoint)))
-	#intensities over 1 are reduced to 1
-	#highlight.intensities[,-c(1)][highlight.intensities[,-c(1)]>1] = 1
-	highlight.intensities[,-c(1)] = highlight.intensities[,-c(1)] / max(highlight.intensities[,-c(1)])
-}
-
-#HIGHLIGHTED SEQUENCES
-for (tp in sort(unique(timepoint))){
-	if (nrow(highlight.intensities) > 0){
-		highlight.merge = merge(highlight, highlight.intensities)
-		highlight.merge = highlight.merge[,c(-1)]
-		highlight.merge = highlight.merge[c(1,2,which(colnames(highlight.merge) == tp),3)]
+	if (length(strsplit(as.character(highlight[1,3]), ';')[[1]]) > 1){
+		#color the highlights by the first ';' delimited portion of their original sequence names.
+		highlight$type = sapply(highlight[,3], function(x) strsplit(as.character(x), ';')[[1]][1])
+	} else {
+		#don't.
+		highlight$type = rep('foo', nrow(highlight))
 	}
-	else
-		highlight.merge = highlight
+
 
 	#print(head(highlight))
-	highlight.merge$Group.member = factor(highlight.merge$Group.member)
-	levels(highlight.merge$Group.member) = c(TRUE, FALSE)
+	#print(head(highlight.intensities))
+	#print(timepoint)
+	colnames(highlight) = c('Ref.contig', 'Coord', 'Highlight.seq', 'Group.member')
 
-	bedlist = list(
-		highlight.merge[highlight.merge$Group.member == TRUE,],
-		highlight.merge[highlight.merge$Group.member == FALSE,]
-	)
+	if (nrow(highlight.intensities) > 0){
+		colnames(highlight.intensities) = c('Highlight.seq', unique(sort(timepoint)))
+		#intensities over 1 are reduced to 1
+		#highlight.intensities[,-c(1)][highlight.intensities[,-c(1)]>1] = 1
+		highlight.intensities[,-c(1)] = highlight.intensities[,-c(1)] / max(highlight.intensities[,-c(1)])
+	}
+
+	#HIGHLIGHTED SEQUENCES
+	for (tp in sort(unique(timepoint))){
+		if (nrow(highlight.intensities) > 0){
+			highlight.merge = merge(highlight, highlight.intensities)
+			highlight.merge = highlight.merge[,c(-1)]
+			highlight.merge = highlight.merge[c(1,2,which(colnames(highlight.merge) == tp),3)]
+		}
+		else
+			highlight.merge = highlight
+
+		#print(head(highlight))
+		highlight.merge$Group.member = factor(highlight.merge$Group.member)
+		levels(highlight.merge$Group.member) = c(TRUE, FALSE)
+
+		bedlist = list(
+			highlight.merge[highlight.merge$Group.member == TRUE,],
+			highlight.merge[highlight.merge$Group.member == FALSE,]
+		)
 	#print(bedlist)
+}
 	circos.genomicTrackPlotRegion(bedlist[[1]], stack = FALSE, bg.border = NA, track.height = track.height, ylim = c(0,1), panel.fun =function(region, value, ...) {
 		i = getI(...)
 		color = highlight.colors[i]
