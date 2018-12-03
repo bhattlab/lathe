@@ -15,6 +15,6 @@ out = merge(out, rrna, all.x = T)
 out = merge(out, classify, all.x = T)
 out = merge(out, coverage, all.x = T)
 
-out[is.na(out)] = 0
+#out[is.na(out)] = 0
 
 write.table(out, snakemake@output[[1]], sep = "\t", quote = F, row.names = F)

@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins, kraken_translate
+localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins, kraken_translate, bin_tig_mapping
 
 samp = config['sample']
 if 'reads2' in config and not config['reads2'] == '':
@@ -18,8 +18,8 @@ rule all:
 		reads,
 		config['assembly'],
 		config['krakendb'],
-		expand("{foo}/final/{foo}.tsv", foo = config['sample'])
-
+		expand("{foo}/final/{foo}.tsv", foo = config['sample']),
+		'{sample}/final/bin_tig_mapping.tsv'.format(sample = samp)
 
 rule bwa_index_setup:
 	input:
@@ -70,7 +70,7 @@ rule bwa_align:
 	resources:
 		mem=16,
 		time=12
-	threads: 8
+	threads: 24
 	shell:
 		"bwa mem -t {threads}" + " {input[0]} " + ' '.join(reads) + " | samtools sort --threads {threads}" + " > {output}"
 
@@ -124,7 +124,7 @@ rule checkm:
 		time=24
 	threads: 24
 	shell:
-		"checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm"
+		"rm -rf {samp}/checkm/*; checkm lineage_wf -t {threads}" +" -x fa --tab_table -f {samp}/checkm/checkm.tsv {samp}/bins/ {samp}/checkm"
 
 rule aragorn:
 	input:
@@ -247,7 +247,7 @@ rule fasta_index:
 	resources:
 		mem=8,
 		time=1
-	threads: 24
+	threads: 1
 	shell:
 		"samtools faidx {input}"
 
@@ -313,24 +313,24 @@ rule postprocess_raw:
 	resources:
 		mem=2,
 		time=1
-	shell: #TODO: tuck this away into a shell script.
+	shell: 
 		"(echo 'Sample Bin Coverage' | tr ' ' '\t'; " +
 			"cat {samp}/coverage/*.txt) > {samp}/final/coverage.tmp; " +
 		"(echo 'Sample Bin Genes' | tr ' ' '\t'; \
 			find {samp}/prokka/ -name '*.gff' | xargs grep -c CDS | cut -f4 -d '/' | sed 's/.fa.gff:/\t/g' | sed 's/{samp}_/{samp}\t/g' | sort -k2,2g) > {samp}/final/prokka.tmp; " + \
 		"find {samp}/quast/ -name 'transposed_report.tsv' | xargs cat | sort -u | sed 's/^\(b..\)/{samp}\t\\1/g' | sed 's/^Assembly/Sample\tBin/g' > {samp}/final/quast.tmp; " + \
 		"cat {samp}/checkm/checkm.tsv " + " | sed 's/^\(b..\)/{samp}\t\\1/g' | sed 's/^Bin Id/Sample\tBin/g' > {samp}/final/checkm.tmp; " + \
-		"(echo 'Sample Bin tRNA' | tr ' ' '\t'; \
-			grep Total {samp}/rna/trna/* | sed 's/\/rna\/trna\//\t/g' | sed 's/.fa.txt:Total tRNA genes = /\t/g') > {samp}/final/trna.tmp; " + \
+		"(echo 'Sample Bin tRNA' | tr ' ' '\\t'; \
+			ls {samp}/rna/trna/ | xargs -n 1 -I foo sh -c \"grep 'Number of' {samp}/rna/trna/foo | cut -f2 -d= | tr -d ' ' | tr '\\n' '+' | sed 's/+$//g' | xargs echo | bc | sed 's/^/foo\\t/g' \" | sed 's/^/{samp}\\t/g' | sed 's/.fa.txt//g') > {samp}/final/trna.tmp; " +
 		"(echo 'Sample Bin rna.16S rna.23S rna.5S' | tr ' ' '\t'; \
 			paste \
 			<(grep -c 16S {samp}/rna/rrna/* | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g') \
 			<(grep -c 23S {samp}/rna/rrna/* | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f3) \
 			<(grep -c 5S {samp}/rna/rrna/* | sed 's/\/rna\/rrna\//\t/g' | sed 's/.fa.txt:/\t/g' | cut -f3) \
-		) > {samp}/final/rrna.tmp; " + \
+			) > {samp}/final/rrna.tmp; " + \
 		"(echo 'Sample Bin Majority.Class Majority.Fraction Size.Mb Final.Class' | tr ' ' '\t'; " +
 			"cat {samp}/classify/bin_species_calls.tsv" + " | sed 's/\.fa//g' | sed 's/^/{samp}\t/g') > {samp}/final/classify.tmp;"
-
+#grep Total {samp}/rna/trna/* | sed 's/\/rna\/trna\//\\t/g' | sed 's/.fa.txt:Total tRNA genes = /\\t/g') > {samp}/final/trna.tmp; " + \
 rule postprocess_final:
 	input:
 		rules.postprocess_raw.output
@@ -340,3 +340,10 @@ rule postprocess_final:
 		"{samp}/logs/postprocess.log"
 	script:
 		"scripts/join_final_tables.R"
+
+rule bin_tig_mapping:
+	input: rules.postprocess_final.output
+	output: '{samp}/final/bin_tig_mapping.tsv'
+	shell:
+		"ls {samp}/bins/ | grep fai  | xargs -n 1 -I foo sh -c \"cat {samp}/bins/foo | sed 's/^/foo\t/g' \" | sed 's/.fa.fai//g' | cut -f1,2 > {output}"
+
