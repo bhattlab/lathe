@@ -1,4 +1,4 @@
-name: longread_assembly_test
+name: longread_assembly
 channels:
   - bioconda
   - biobuilds
@@ -25,6 +25,7 @@ dependencies:
   - ncurses=6.1
   - r-factoextra
   - tensorflow #makes medaka work
+  - mummer
   - pip:
       - snakemake
       - git+https://github.com/elimoss/circlator.git
