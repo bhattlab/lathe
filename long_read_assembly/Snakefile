@@ -34,7 +34,7 @@ for d in fast5_dirs:
 
 rule all:
 	input:
-		'{sample}/2c.circlator_final/{sample}_circularized.fa'.format(sample = sample)
+		'{sample}/3b.final_assembly/{sample}.fa'.format(sample = sample)
 #		'{sample}/2.circlator/06.fixstart.fasta'.format(sample = sample), #circlize
 #		'{sample}/2b.circlator_big_tigs/circlator/06.fixstart.fasta'.format(sample = sample),
 		#'{sample}/4.tombo/readstats.5mC.tombo.per_read_stats'.format(sample=sample).format(sample = sample), #tombo
