@@ -26,10 +26,11 @@ dependencies:
   - r-factoextra
   - tensorflow #makes medaka work
   - mummer
+  - circlator
   - pip:
       - snakemake
-      - git+https://github.com/elimoss/circlator.git
       - git+https://github.com/nanoporetech/tombo.git
+      #- git+https://github.com/elimoss/circlator.git
       #- git+https://github.com/nanoporetech/medaka.git #this doesn't work.  you'll need to clone the repo and pip install . from there.
 
 #versions are pinned only to force the newest one.  these will need to be updated manually.
