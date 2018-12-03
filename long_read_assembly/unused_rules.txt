@@ -1,0 +1,133 @@
+'''
+rule pilon:
+	input: 
+		rules.circlator_fixstart.output,
+		rules.align_short_reads.output,
+		rules.align_short_reads.output[0] + '.bai'
+	output: "{sample}/3a.pilon/{sample}_pilon.fasta"
+	resources:
+		mem=8000,
+		time=48
+	params:
+		java_mem = 8000
+	shell:
+		"java -Xmx{params.java_mem}G -jar $(which pilon | sed 's/\/pilon//g')/../share/pilon*/pilon*.jar --genome {input[0]} " +
+		"--frags {input[1]} --output {sample}_pilon --outdir {sample}/3a.pilon/ --tracks" #
+
+'''
+
+'''
+rule extract_candidate_genome_tigs:
+	input:
+		rules.circlize.output,
+		rules.circlize.output[0] + '.fai'
+	output:
+		dynamic("{sample}/2b.circlator_big_tigs/{tigname}.tigname")
+	shell:
+		#"sort -k2,2gr {input[1]} | awk '{{if ($2 > 2000000) print $1}}' > {output}"
+		"sort -k2,2gr {input[1]} | awk '{{if ($2 > 2000000) print $1}}' | " +
+		"xargs -n 1 -I foo sh -c 'echo foo > {sample}/2b.circlator_big_tigs/foo.tigname'"
+
+rule circlator_progcheck:
+	input: 
+		rules.merge.output
+	output: '{sample}/2.circlator/0.progcheck_ok'
+	shell: "circlator progcheck && touch {output}"
+
+rule circlator_mapreads:
+	input: 
+		rules.merge.output,
+		'{{sample}}/1.assemble_{g}/{{sample}}_{g}.correctedReads.fasta.gz'.format(g = config['genome_size'].split(",")[0]),
+		rules.circlator_progcheck.output
+	output:	"{sample}/2.circlator/1.mapreads.bam"
+	threads: 24
+	resources:
+		time=24,
+		mem=48
+	shell: "circlator mapreads {input[0]} {input[1]} {output} --threads {threads} --bwa_opts '-x ont2d' --verbose"
+
+rule circlator_bam2reads:
+	input: rules.circlator_mapreads.output
+	output: "{sample}/2.circlator/2.bam2reads.fasta"
+	resources:
+		mem=8,
+		time=6
+	shell: "circlator bam2reads --discard_unmapped {input} {wildcards.sample}/2.circlator/2.bam2reads"
+
+rule circlator_assemble:
+	input: rules.circlator_bam2reads.output
+	output: "{sample}/2.circlator/3.assemble/canu.contigs.fasta"
+	threads: 24
+	resources:
+		time=24,
+		mem=180
+	shell: 
+		"circlator assemble --threads {threads} --assembler canu --data_type nanopore-corrected {input} {wildcards.sample}/2.circlator/3.assemble/"
+
+rule circlator_merge:
+	input: 
+		rules.merge.output,
+		'{{sample}}/1.assemble_{g}/{{sample}}_{g}.correctedReads.fasta.gz'.format(g = config['genome_size'].split(",")[0]),
+		rules.circlator_assemble.output
+	output:
+		"{sample}/2.circlator/4.merge.fasta"
+	threads: 4
+	resources:
+		time=80,
+		mem=180
+	shell: "circlator merge {input[0]} {input[2]} {wildcards.sample}/2.circlator/4.merge " +
+			"--min_id 85 --breaklen 4000 --reassemble_end 50000 --threads {threads} --reads {input[1]} " +
+			"--assembler canu --data_type nanopore-corrected"
+
+rule circlator_clean:
+	input: rules.circlator_merge.output
+	output: "{sample}/2.circlator/5.clean.fasta"
+	resources:
+		time=24,
+		mem=20
+	shell: "circlator clean {input} {wildcards.sample}/2.circlator/5.clean"
+
+rule circlator_fixstart:
+	input: rules.circlator_clean.output
+	output: "{sample}/2.circlator/6.fixstart.fasta"
+	resources:
+		mem=24,
+		time=24
+	shell: "circlator fixstart {input} {wildcards.sample}/2.circlator/6.fixstart"
+
+rule circlize_2mb:
+	input:
+		"{sample}/2.circlator/6.fixstart.fasta"
+		#rules.extract_candidate_genome_tigs.output
+		"{sample}/2b.circlator_big_tigs/{tigname}.tigname"
+	output: '{sample}/2b.circlator_big_tigs/{tigname}/6.fixstart.fasta'
+	threads: 16
+	resources:
+		time=24,
+		mem=60
+	shell:
+		'rmdir {sample}/2b.circlator_big_tigs/{wildcards.tigname}; ' +
+		'circlator all --verbose --threads {threads} ' +
+		' --merge_min_id 85 --merge_min_length 1600 --merge_breaklen 4000 --assembler canu ' + #--split_all_reads split all reads may be used with canu assembly
+		"--data_type nanopore-corrected --bwa_opts '-x ont2d' --merge_reassemble_end 50000 " + #"--merge_min_length_merge 500 " +
+		'{input[0]} --b2r_discard_unmapped --b2r_only_contigs {input[1]} ' +
+		'{sample}/1.assemble_{g}/{sample}.correctedReads.fasta.gz {sample}/2b.circlator_big_tigs/{wildcards.tigname}/'
+
+rule circlize_final:
+	input:
+		dynamic(rules.circlize_2mb.output)
+	output:
+		'{sample}/2c.circlator_final/{sample}_circularized.fa',
+		'{sample}/2c.circlator_final/circularized_contigs.tsv'
+	shell:
+		"cut -f1 {sample}/2.circlator/sanitized.fa.fai > {sample}/2.circlator/sanitized_tigs.list; " + #aggregate sequences non-redundantly
+		"ls {sample}/2b.circlator_big_tigs | grep -v txt > {sample}/2.circlator/recirclized_tigs.list; " +
+		"(grep -vf {sample}/2.circlator/recirclized_tigs.list {sample}/2.circlator/sanitized_tigs.list | " +
+		"xargs samtools faidx {sample}/2.circlator/sanitized.fa; " +
+		"cat {input}) > {output[0]}; " +
+
+		#aggregate circularization logs
+		" (grep -P '\\t1' {sample}/2.circlator/04.merge.circularise.log; " +
+		"grep -P '\\t1' {sample}/2b.circlator_big_tigs/*/04.merge.circularise.log | cut -f2,99 -d ':') " +
+		"| sed -e 's/:[^tig\\t]*/_/g' | sed 's/_\\t/\\t/g' | sort -u > {output[1]}"
+'''

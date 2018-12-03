@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 import sys
-import os
+import subprocess
 
 files = snakemake.input
 
@@ -13,4 +13,7 @@ if len(remaining_joins) > 0:
 	cmd += "|\n" + " |\n".join(remaining_joins)
 
 cmd += ' > ' + snakemake.output[0]
-os.system(cmd)
+
+#print(cmd)
+
+subprocess.run(cmd.split(' '))
