@@ -1,0 +1,63 @@
+# Metagenomics Singularity environment definition for long read workflow
+# Eli Moss
+# elimoss@stanford.edu
+# January 2019
+
+# This environment is used in practice by adding --with-singularity shub://elimoss/metagenomics_workflows:longread
+# to the snakemake command.
+
+bootstrap: docker
+from: neurodebian:jessie
+
+# this command assumes at least singularity 2.3
+%environment
+    PATH="/usr/local/anaconda/bin:$PATH"
+%post
+    # install debian packages
+    apt-get update
+    apt-get install -y eatmydata
+    eatmydata apt-get install -y wget bzip2 \
+      ca-certificates libglib2.0-0 libxext6 libsm6 libxrender1 \
+      git git-annex-standalone
+    apt-get clean
+
+
+
+
+    # install anaconda
+    if [ ! -d /usr/local/anaconda ]; then
+         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+            -O ~/anaconda.sh && \
+         bash ~/anaconda.sh -b -p /usr/local/anaconda && \
+         rm ~/anaconda.sh
+    fi
+    # set anaconda path
+    export PATH="/usr/local/anaconda/bin:$PATH"
+
+    # requirements for long read workflow
+    conda install -y -c conda-forge -c bioconda -c intel -c biobuilds\
+       python>3.5 pilon nanopolish=0.10.2 bwa minimap2 canu=1.7.1 samtools bcftools \
+       bedtools bedops biopython pip jellyfish r-vegan r-ggplot2 r-plyr tabix ncurses=6.1 \
+	     r-factoextra tensorflow mummer circlator pip
+
+		pip install snakemake git+https://github.com/nanoporetech/tombo.git
+
+		conda env create tombo ont-tombo
+
+		#install quickmerge
+		git clone https://github.com/mahulchak/quickmerge.git
+		cd quickmerge
+		make
+		make check
+		make install
+
+
+#    # make /data and /scripts so we can mount it to access external resources
+#    if [ ! -d /data ]; then mkdir /data; fi
+#    if [ ! -d /scripts ]; then mkdir /scripts; fi
+
+%runscript
+    exec /bin/bash
+		source activate tombo
+
+# quickmerge must be installed manually
