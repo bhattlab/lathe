@@ -43,8 +43,8 @@ from: neurodebian:jessie
     conda install -y -c conda-forge -c bioconda \
        python>3.5 pilon bwa minimap2 canu=1.7.1 bcftools \
        bedtools bedops biopython tabix ncurses \
-       mummer circlator datrie 
- 
+       mummer circlator datrie
+
    #removed to speed up setup
    #nanopolish jellyfish r-vegan r-ggplot2 r-plyr r-factoextra
    #
@@ -55,7 +55,7 @@ from: neurodebian:jessie
    # tombo for methylation
    # conda create -c bioconda -n tombo ont-tombo
    # source activate tombo
-   
+
    pip install snakemake
 
    #install quickmerge
@@ -63,11 +63,16 @@ from: neurodebian:jessie
    cd quickmerge
    bash make_merger.sh
 
-   
+
    #set up basecaller
    wget https://mirror.oxfordnanoportal.com/software/analysis/ont_albacore-2.3.4-cp36-cp36m-manylinux1_x86_64.whl
    pip install ont_albacore-*_x86_64.whl
 
+	 git clone https://github.com/nanoporetech/medaka.git
+	 cd medaka
+	 make install
+	 . ./venv/bin/activate
+	 
 #    # make /data and /scripts so we can mount it to access external resources
 #    if [ ! -d /data ]; then mkdir /data; fi
 #    if [ ! -d /scripts ]; then mkdir /scripts; fi
@@ -76,5 +81,4 @@ from: neurodebian:jessie
    exec /bin/bash
    # source activate tombo
    export PATH=/root/quickmerge:/root/quickmerge/MUMmer3.23:$PATH
-
-
+	 . ./venv/bin/activate

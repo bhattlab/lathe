@@ -13,7 +13,7 @@ basic steps:
 	a.tombo
 	b.nanopolish
 
-A note on the below implementation: a few of the nanopolish rules, specifically those
+A note on implementation: a few of the nanopolish rules, specifically those
 involving dynamic inputs/outputs required by nanopolish_makerange.py, don't rely on Snakemake
 to resolve the sample wildcard, instead specifying it with the sample variable below.  This is
 because dynamic rule resolution does a file tree traversal, which is prohitively slow if a fast5
@@ -50,6 +50,7 @@ rule basecall:
 	resources:
 		time=4,
 		mem=12
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"read_fast5_basecaller.py -t {{threads}} -f {fc} -k {k} ".format(fc=config['flowcell'], k = config['kit']) +
 		" --save_path {sample}/0.basecall/raw_calls/{wildcards.run}/{wildcards.subfolder}/ " +
@@ -67,6 +68,7 @@ rule nanoplot:
 	resources:
 		time=4
 	threads: 12
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell: "NanoPlot --fastq {input} -t {threads} --color green  -o " + "{s}/0.basecall/nanoplots".format(s = sample)
 
 rule assemble:
@@ -78,6 +80,7 @@ rule assemble:
 	resources:
 		mem=100,
 		time=80
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"canu -p {sample}_{wildcards.genome_size} -d {sample}/1.assemble_{wildcards.genome_size}/ -nanopore-raw {input} " +
 		#"corOutCoverage=10000 corMhapSensitivity=high corMinCoverage=0 correctedErrorRate=0.16 " +
@@ -96,6 +99,7 @@ rule merge:
 	resources:
 		time=6,
 		mem=24
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"merge_wrapper.py {input} -pre {sample}/1a.merge/{sample}_merged; mv merged.fasta {output}"
 
@@ -106,6 +110,7 @@ rule align_paf:
 	output:
 		"{ref}.f{asta}.paf"
 	threads: 8
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"minimap2 -t {threads} -x map-ont {input} > {output}"
 
@@ -119,6 +124,7 @@ rule align_bam:
 	resources:
 		time=6,
 		mem=16
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"minimap2 -t {threads} -ax map-ont {input} | samtools sort --threads {threads} > {output}"
 
@@ -127,16 +133,18 @@ rule bam_idx:
 		'{some}.bam'
 	output:
 		'{some}.bam.bai'
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"samtools index {input}"
 
 rule faidx:
 	input: '{something}.f{asta}'
 	output: '{something}.f{asta}.fai'
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell: "samtools faidx {input}"
 
 rule circlator:
-	input: 
+	input:
 		rules.merge.output,
 		'{{sample}}/1.assemble_{g}/{{sample}}_{g}.correctedReads.fasta.gz'.format(g = config['genome_size'].split(",")[0]),
 	output: '{sample}/2.circlator/06.fixstart.fasta'
@@ -144,6 +152,7 @@ rule circlator:
 	resources:
 		time=80,
 		mem=120
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		'rmdir {sample}/2.circlator/; ' +
 		'circlator all --verbose --threads {threads} ' +
@@ -155,7 +164,7 @@ rule circlator_cleanup_tignames:
 	input: rules.circlator.output
 	output: '{sample}/2.circlator/06.fixstart_cleannames.fasta'
 	shell:
-		"cat {input} | sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " + 
+		"cat {input} | sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
 		"cut -f1,9,17 | tr '\\t' '_' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}"
 
 rule medaka:
@@ -167,46 +176,50 @@ rule medaka:
 	resources:
 		mem=16,
 		time=24
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
-		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/3.medaka -t {threads};' 
+		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/3.medaka -t {threads};'
 
 		#'export VIRTUAL_ENV_DISABLE_PROMPT=1; source /labs/asbhatt/moss/tools/long_read/medaka-0.3.0/venv/bin/activate; ' ++
 		#'deactivate'
 
 rule align_short_reads:
-	input: 
+	input:
 		rules.circlator_cleanup_tignames.output,
 		config['short_reads'].split(',')
 	output: "{sample}/3a.pilon/short_reads.bam"
 	threads: 48
-	params: 
+	params:
 		reads = config['short_reads'].split(',')
 	resources:
 		mem=48,
 		time=24
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"bwa index {input[0]}; bwa mem -t {threads} {input[0]} {params.reads} | samtools sort --threads {threads} > {output}"
 
 rule pilon_ranges:
-	input: 
+	input:
 		rules.circlator_cleanup_tignames.output,
 		rules.circlator_cleanup_tignames.output[0] + '.fai'
 	output: dynamic('{sample}/3a.pilon/ranges/{range}')
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"bedtools makewindows -w 100000 -g {input[1]} | awk '{{print $1,\":\", $2+ 1, \"-\", $3}}'  | tr -d ' ' " +
 		"| xargs -n 1 -I foo touch {sample}/3a.pilon/ranges/foo"
 
 rule pilon_subsetrun:
-	input: 
+	input:
 		rules.circlator_cleanup_tignames.output,
 		rules.align_short_reads.output,
 		rules.align_short_reads.output[0] + '.bai',
 		'{sample}/3a.pilon/ranges/{range}',
-	output: 
-		'{sample}/3a.pilon/sub_runs/{range}/{sample}_{range}.vcf.gz' 
+	output:
+		'{sample}/3a.pilon/sub_runs/{range}/{sample}_{range}.vcf.gz'
 	resources:
 		time=lambda wildcards, attempt: 4 * attempt,
 		mem=lambda wildcards, attempt: 32 * attempt
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	params:
 		java_mem = 30,
 		bam = "{sample}/3a.pilon/sub_runs/{range}/{sample}_{range}.bam",
@@ -220,47 +233,49 @@ do\n \
        break \n  \
    fi\n \
 done; echo Using $i x of total coverage; \n \
-" + # set env var $i to be the smallest read subset decimal (in increments of 0.1, with a couple very low values thrown in, too) 
-    # sufficient to generate at least 40x coverage depth of the target sequence, or 
+" + # set env var $i to be the smallest read subset decimal (in increments of 0.1, with a couple very low values thrown in, too)
+    # sufficient to generate at least 40x coverage depth of the target sequence, or
 	# 1 if 40x coverage cannot be achieved with the available read data
 
-		"samtools view -h -O BAM -s $i {input[1]} {wildcards.range} > {params.bam};\n " 
+		"samtools view -h -O BAM -s $i {input[1]} {wildcards.range} > {params.bam};\n "
 		"samtools index {params.bam};\n "
 		"samtools faidx {input[0]} $(echo {wildcards.range}| cut -f1 -d ':') | cut -f1 -d ':' > {params.fa};\n " +
 		"/usr/bin/java -Xmx{params.java_mem}G -jar $(which pilon | sed 's/\/pilon//g')/../share/pilon*/pilon*.jar " +
-		"--genome {params.fa} " + #--targets {wildcards.range} 
+		"--genome {params.fa} " + #--targets {wildcards.range}
 		"--unpaired {params.bam} --output {sample}_{wildcards.range} --outdir {sample}/3a.pilon/sub_runs/{wildcards.range} " +
-		" --vcf --nostrays;\n " + 
-		"bgzip {sample}/3a.pilon/sub_runs/{wildcards.range}/{sample}_{wildcards.range}.vcf;\n" + 
+		" --vcf --nostrays;\n " +
+		"bgzip {sample}/3a.pilon/sub_runs/{wildcards.range}/{sample}_{wildcards.range}.vcf;\n" +
 		"tabix -fp vcf {sample}/3a.pilon/sub_runs/{wildcards.range}/{sample}_{wildcards.range}.vcf.gz "
 
 rule pilon_aggregate_vcf:
-	input: 
+	input:
 		dynamic(rules.pilon_subsetrun.output)
 	output: '{sample}/3a.pilon/all_corrections.vcf.gz'
 	resources:
 		time=4,
 		mem=8
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
-		"(bcftools concat --naive {sample}/3a.pilon/sub_runs/*/*.vcf.gz | zcat | head -100000 | grep ^#;\n " + 
+		"(bcftools concat --naive {sample}/3a.pilon/sub_runs/*/*.vcf.gz | zcat | head -100000 | grep ^#;\n " +
 		#faster version including only variant sites:
 		#header
 		#variant records.  SV's omitted to workaround a problem in bcftools.
 		"bcftools concat --naive {sample}/3a.pilon/sub_runs/*/*.vcf.gz | zcat | grep -v ^# | grep -v '0/0' | sort -u -k1,1d -k2,2g | grep -v SVTYPE) | bgzip " +
 		"> {output};\n " +
 		#"bcftools concat -aD {sample}/3a.pilon/sub_runs/*/*.vcf.gz -O z -o {output};\n" +
-		"tabix -p vcf {output}" #bgzip {sample}/3a.pilon/all_corrections.vcf; 
+		"tabix -p vcf {output}" #bgzip {sample}/3a.pilon/all_corrections.vcf;
 
 
 '''
 
 '''
 rule pilon_consensus:
-	input: 
+	input:
 		rules.circlator_cleanup_tignames.output,
 		rules.pilon_aggregate_vcf.output
 	output:
 		"{sample}/3a.pilon/{sample}_pilon.fa"
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"bcftools consensus -f {input} -o {output}"
 
@@ -274,8 +289,8 @@ rule final_assembly:
 	#select a method of polishing, and clean up and deduplicate contig names
 	input: choose_pilon_or_medaka()
 	output: "{sample}/3b.final_assembly/{sample}.fa"
-	shell: 
-		"cat {input} | sed -r 's/(tig[0-9]{{8}}):[^a-z]*/\\1_/g' | sed 's/_$//g' > {output}" #| sed 's/\.tig/\ttig/g' | tr '_' '\t' | " + 
+	shell:
+		"cat {input} | sed -r 's/(tig[0-9]{{8}}):[^a-z]*/\\1_/g' | sed 's/_$//g' > {output}" #| sed 's/\.tig/\ttig/g' | tr '_' '\t' | " +
 		#"cut -f1,9,17 | tr '\t' '_' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;'
 
 rule tombo_annotate:
@@ -292,6 +307,7 @@ rule tombo_annotate:
 		dir_to_annotate = lambda wildcards: fast5_abspath_run_subfolder[wildcards.dir.replace('___', '/')],
 		f1 = lambda wildcards: wildcards.dir.split('___')[0],
 		f2 = lambda wildcards: wildcards.dir.split('___')[1]
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"source activate tombo && " +
 		"tombo preprocess annotate_raw_with_fastqs --overwrite --fast5-basedir {params.dir_to_annotate} " +
@@ -312,6 +328,7 @@ rule tombo_resquiggle:
 	params:
 		dir_to_squiggle = lambda wildcards: fast5_abspath_run_subfolder[wildcards.dir.replace('___', '/')],
 		index_filename = lambda wildcards: '../.' + wildcards.dir.split('___')[1] + '.RawGenomeCorrected_000.tombo.index'
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"source activate tombo; " +
 		"tombo resquiggle --overwrite {params.dir_to_squiggle} " +
@@ -329,6 +346,7 @@ rule tombo_detect:
 		time=lambda wildcards, attempt: 48 * attempt
 	params:
 		fast5_dirs = [d for d in fast5_run_subfolder_abspath]
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"source activate tombo && " +
 		"tombo detect_modifications alternative_model --fast5-basedirs {params.fast5_dirs} " +
@@ -337,38 +355,41 @@ rule tombo_detect:
 	 	"--alternate-bases {wildcards.methyl} --processes {threads} --dna "
 
 rule tombo_wig:
-	input: 
+	input:
 		rules.tombo_detect.output,
 	output:
 		"{sample}/4.tombo/{sample}_{methyl}_sites.fraction_modified_reads.plus.wig"
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"source activate tombo; " +
 		"tombo text_output browser_files --browser-file-basename {sample}/4.tombo/{sample}_{wildcards.methyl}_sites " +
 		"--file-type fraction --statistics-filename {input} "
 
 rule tombo_bed_fasta:
-	input: 
+	input:
 		rules.tombo_wig.output,
 		rules.final_assembly.output,
-	output: 
+	output:
 		"{sample}/4.tombo/{sample}_{methyl}_sites.bed",
 		"{sample}/4.tombo/{sample}_{methyl}_sites.fa"
 	params:
 		meth_frac = 0.5,
 		site_radius = 2
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
-		"cat {input[0]} | wig2bed | " + 
+		"cat {input[0]} | wig2bed | " +
 		"awk '{{if ($5 > {params.meth_frac}) print $1, $2-{params.site_radius}, $3+{params.site_radius}, $4, $5}}' | " +
 		"tr ' ' '\\t' | awk '{{if ($2 < 0) print $1, 0, $3, $4, $5; else print $0}}' | tr ' ' '\\t' > {output[0]}; " +
 		"bedtools getfasta -s -fi {input[1]} -bed {output[0]} | tr -d '()' > {output[1]}"
 
 rule plasmid_kmer_methyl:
-	input: 
+	input:
 		rules.tombo_bed_fasta.output,
 		rules.final_assembly.output[0] + '.fai'
 	output: dynamic("{sample}/tmp_kmer_methyl_{methyl}/jellyfish/tsv/{tig}.tsv")
 	params:
 		kmer_length = 5
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
 	shell:
 		"mkdir -p {sample}/tmp_kmer_methyl_{wildcards.methyl}/fa {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/db {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/tsv;\n" +
 		"cut -f1 {input[2]} | xargs -n 1 -I foo sh -c \"grep -A1 foo {input[1]} > {sample}/tmp_kmer_methyl_{wildcards.methyl}/fa/foo_sites.fa\";\n" +
@@ -382,21 +403,22 @@ rule plasmid_kmer_methyl_join:
 	run:
 		"join_several {input} > {output}"
 	#script:
-	#	"scripts/join_several2.py" 
+	#	"scripts/join_several2.py"
 
 rule plasmid_kmer_tig:
-	input: 
+	input:
 		rules.final_assembly.output[0],
 		rules.final_assembly.output[0] + '.fai'
 	output: dynamic("{sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/{tig}.tsv")
 	params:
 		kmer_length = 5
-	shell: 
+	singularity: "shub://elimoss/metagenomics_workflows:longread"
+	shell:
 		"mkdir -p {sample}/tmp_kmer_wholetig/jellyfish/whole_tsv {sample}/tmp_kmer_wholetig/jellyfish/db {sample}/tmp_kmer_wholetig/fa; \n" +
 		"cat {input[1]} | cut -f1 | xargs -n1 -I foo -P 8 sh -c 'samtools faidx {input[0]} foo > {sample}/tmp_kmer_wholetig/fa/foo.fa; \n\
 jellyfish count -C {sample}/tmp_kmer_wholetig/fa/foo.fa -m {params.kmer_length} -s 10000 -o {sample}/tmp_kmer_wholetig/jellyfish/db/foo.jf; \n\
 jellyfish dump {sample}/tmp_kmer_wholetig/jellyfish/db/foo.jf --tab --column | sort -k1,1 > {sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/foo.tsv'; \n"
-		
+
 rule plasmid_kmer_tig_join:
 	input: dynamic("{sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/{{tig}}.tsv".format(sample = sample))
 	output:"{sample}/5.assign_plasmids/kmer/tig_kmers.tsv",
@@ -419,13 +441,13 @@ rule plasmid_list:
 	input:
 		rules.final_assembly.output,
 		rules.final_assembly.output[0] + '.fai'
-	output:	
+	output:
 		"{sample}/5.assign_plasmids/plasmids.tsv"
 	shell:
 		"cut -f2 {input[1]} | xargs -n 1 -I foo grep foo {input[2]} | awk '{{if ($2 < 1000000) print $0}}' > {output}"
 
 rule plasmid_dendro:
-	input: 
+	input:
 		"{sample}/5.assign_plasmids/kmer/methyl_kmers_5mC.tsv",
 		"{sample}/5.assign_plasmids/kmer/methyl_kmers_6mA.tsv",
 		"{sample}/5.assign_plasmids/kmer/tig_kmers.tsv",
