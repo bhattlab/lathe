@@ -63,6 +63,10 @@ from: neurodebian:jessie
    cd quickmerge
    bash make_merger.sh
 
+   
+   #set up basecaller
+   wget https://mirror.oxfordnanoportal.com/software/analysis/ont_albacore-2.3.4-cp36-cp36m-manylinux1_x86_64.whl
+   pip install ont_albacore-*_x86_64.whl
 
 #    # make /data and /scripts so we can mount it to access external resources
 #    if [ ! -d /data ]; then mkdir /data; fi
