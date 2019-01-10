@@ -40,11 +40,17 @@ from: neurodebian:jessie
     export PATH="/usr/local/anaconda/bin:$PATH"
 
     # requirements for long read workflow
-    conda install -y -c conda-forge -c bioconda -c intel -c biobuilds\
-       python>3.5 pilon nanopolish=0.10.2 bwa minimap2 canu=1.7.1 samtools bcftools \
-       bedtools bedops biopython pip jellyfish r-vegan r-ggplot2 r-plyr tabix ncurses=6.1 \
-       r-factoextra tensorflow mummer circlator datrie 
+    conda install -y -c conda-forge -c bioconda \
+       python>3.5 pilon bwa minimap2 canu=1.7.1 bcftools \
+       bedtools bedops biopython tabix ncurses \
+       mummer circlator datrie 
 
+   #removed to speed up setup
+   #nanopolish jellyfish r-vegan r-ggplot2 r-plyr r-factoextra
+   #
+
+   conda install -y -c biobuilds samtools
+   conda install -y -c intel tensorflow
 
    # tombo for methylation
    # conda create -c bioconda -n tombo ont-tombo
