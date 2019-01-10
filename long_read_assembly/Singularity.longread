@@ -71,6 +71,7 @@ from: neurodebian:jessie
 	 git clone https://github.com/nanoporetech/medaka.git
 	 cd medaka
 	 make install
+	 pip install virtualenv
 	 . ./venv/bin/activate
 
 #    # make /data and /scripts so we can mount it to access external resources
@@ -79,6 +80,6 @@ from: neurodebian:jessie
 
 %runscript
    exec /bin/bash
-   # source activate tombo 
+   # source activate tombo
    export PATH=/root/quickmerge:/root/quickmerge/MUMmer3.23:$PATH
 	 . ./venv/bin/activate
