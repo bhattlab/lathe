@@ -72,13 +72,13 @@ from: neurodebian:jessie
 	 cd medaka
 	 make install
 	 . ./venv/bin/activate
-	 
+
 #    # make /data and /scripts so we can mount it to access external resources
 #    if [ ! -d /data ]; then mkdir /data; fi
 #    if [ ! -d /scripts ]; then mkdir /scripts; fi
 
 %runscript
    exec /bin/bash
-   # source activate tombo
+   # source activate tombo 
    export PATH=/root/quickmerge:/root/quickmerge/MUMmer3.23:$PATH
 	 . ./venv/bin/activate
