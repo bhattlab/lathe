@@ -12,21 +12,20 @@
 # to the snakemake command.
 
 bootstrap: docker
-from: neurodebian:jessie
+from: ubuntu:19.04
 
 # this command assumes at least singularity 2.3
 %environment
     PATH="/usr/local/anaconda/bin:/quickmerge:/quickmerge/MUMmer3.23:$PATH"
 %post
-    # install debian packages
     apt-get update
     apt-get install -y eatmydata
     eatmydata apt-get install -y wget bzip2 \
       ca-certificates libglib2.0-0 libxext6 libsm6 libxrender1 \
-      git git-annex-standalone
+      git
     apt-get clean
 
-    apt-get install -y gcc build-essential
+    apt-get install -y build-essential
 
 
     # install anaconda
@@ -48,7 +47,7 @@ from: neurodebian:jessie
    #nanopolish jellyfish r-vegan r-ggplot2 r-plyr r-factoextra
 
    conda install -y -c biobuilds samtools
-   conda install -y -c intel tensorflow
+
 
    # tombo for methylation
    # conda create -c bioconda -n tombo ont-tombo
@@ -57,8 +56,9 @@ from: neurodebian:jessie
    pip install snakemake
 
    #install quickmerge
-   git clone https://github.com/mahulchak/quickmerge.git
-   cd quickmerge
+   wget https://github.com/mahulchak/quickmerge/archive/v0.2.tar.gz
+   tar -zxf v0.2.tar.gz
+	 cd quickmerge-0.2/
    bash make_merger.sh
 	 export PATH="quickmerge:/quickmerge/MUMmer3.23:$PATH"
 
@@ -66,6 +66,8 @@ from: neurodebian:jessie
    wget https://mirror.oxfordnanoportal.com/software/analysis/ont_albacore-2.3.4-cp36-cp36m-manylinux1_x86_64.whl
    pip install ont_albacore-*_x86_64.whl
 
+
+#   conda install -y -c intel tensorflow
 	 pip install medaka
 
 %runscript
