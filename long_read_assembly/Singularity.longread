@@ -62,6 +62,7 @@ from: neurodebian:jessie
    git clone https://github.com/mahulchak/quickmerge.git
    cd quickmerge
    bash make_merger.sh
+	 cp merge_wrapper.py merger quickmerge /usr/local/bin/
 
 
    #set up basecaller

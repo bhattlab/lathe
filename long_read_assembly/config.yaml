@@ -2,7 +2,12 @@ sample_name: 'sample'
 fast5_dirs_list: 'fodn.txt' #list of absolute paths to run/fast5/* subfolders containing .fast5 files
 flowcell: 'FLO-MIN106'
 kit: 'SQK-LSK109'
-genome_size: '50m,100m'
-grid_options: '--time=6:00:00 --account asbhatt'
-usegrid: 'True' #should canu use the grid?
 short_reads: '' #Comma-separated forward and reverse optionally gzipped fastq files.  Optional.  If no reads are given, the pilon step is skipped.
+singularity: "shub://elimoss/metagenomics_workflows:longread"
+
+#the below options are all related to Canu
+canu_args: "ovsMethod='parallel' ovsMemory=32 ovbMemory=32 cormhapMemory=32 cormhapThreads=4 \
+redMemory=32 oeaMemory=48 batMemory=200 cnsMemory=32 ovlMemory=32 ovlThreads=4 "
+usegrid: 'True' #should Canu use the grid?
+grid_options: '--time=6:00:00 --account asbhatt'
+genome_size: '50m,100m'

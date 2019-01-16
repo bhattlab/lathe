@@ -1,6 +1,10 @@
 # Metagenomics Workflows
 Workflows for metagenomic sequence data processing and analysis.  Further documentation found in each workflow folder.
 
+### long_read_assembly
+
+Snakemake workflow for long read basecalling, assembly and post-processing.  Please see documentation in long_read_assembly/readme.md.
+
 ### bin_label_and_evaluate
 
 Snakemake workflow for aligning, binning, classifying and evaluating a
@@ -12,6 +16,8 @@ Snakemake workflow for visualizing assemblies of a particular genome across cond
 
 
 # Installing workflows
+
+## Please note, this is superseded by Singularity environment for long_read_assembly, and hopefully more soon.
 
 First, install miniconda3. This is an environment management system that should keep everything organized.
 
