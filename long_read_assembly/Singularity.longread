@@ -23,7 +23,7 @@ from: neurodebian:jessie
     apt-get install -y eatmydata
     eatmydata apt-get install -y wget bzip2 \
       ca-certificates libglib2.0-0 libxext6 libsm6 libxrender1 \
-      git git-annex-standalone
+      git git-annex-standalone #zlib1g-dev libncurses5-dev libncursesw5-dev
     apt-get clean
 
     apt-get install -y gcc build-essential
@@ -50,8 +50,8 @@ from: neurodebian:jessie
    #
 
    conda install -y -c biobuilds samtools
-   conda install -y -c intel tensorflow
 
+  
    # tombo for methylation
    # conda create -c bioconda -n tombo ont-tombo
    # source activate tombo
@@ -69,11 +69,11 @@ from: neurodebian:jessie
    wget https://mirror.oxfordnanoportal.com/software/analysis/ont_albacore-2.3.4-cp36-cp36m-manylinux1_x86_64.whl
    pip install ont_albacore-*_x86_64.whl
 
-	 git clone https://github.com/nanoporetech/medaka.git
-	 cd medaka
-	 make install
-	 pip install virtualenv
-	 . ./venv/bin/activate
+pip install medaka
+
+
+
+
 
 #    # make /data and /scripts so we can mount it to access external resources
 #    if [ ! -d /data ]; then mkdir /data; fi
