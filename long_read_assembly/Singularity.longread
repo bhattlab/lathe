@@ -36,6 +36,7 @@ from: neurodebian:jessie
          bash ~/anaconda.sh -b -p /usr/local/anaconda && \
          rm ~/anaconda.sh
     fi
+		export PATH="/usr/local/anaconda/bin:$PATH"
 
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
@@ -45,7 +46,6 @@ from: neurodebian:jessie
 
    #removed to speed up setup
    #nanopolish jellyfish r-vegan r-ggplot2 r-plyr r-factoextra
-   #
 
    conda install -y -c biobuilds samtools
    conda install -y -c intel tensorflow
@@ -60,7 +60,7 @@ from: neurodebian:jessie
    git clone https://github.com/mahulchak/quickmerge.git
    cd quickmerge
    bash make_merger.sh
-
+	 export PATH="quickmerge:/quickmerge/MUMmer3.23:$PATH"
 
    #set up basecaller
    wget https://mirror.oxfordnanoportal.com/software/analysis/ont_albacore-2.3.4-cp36-cp36m-manylinux1_x86_64.whl
