@@ -16,7 +16,7 @@ from: neurodebian:jessie
 
 # this command assumes at least singularity 2.3
 %environment
-    PATH="/usr/local/anaconda/bin:$PATH"
+    PATH="/usr/local/anaconda/bin:/quickmerge:/quickmerge/MUMmer3.23:$PATH"
 %post
     # install debian packages
     apt-get update
@@ -36,8 +36,6 @@ from: neurodebian:jessie
          bash ~/anaconda.sh -b -p /usr/local/anaconda && \
          rm ~/anaconda.sh
     fi
-    # set anaconda path
-    export PATH="/usr/local/anaconda/bin:$PATH"
 
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
@@ -62,7 +60,6 @@ from: neurodebian:jessie
    git clone https://github.com/mahulchak/quickmerge.git
    cd quickmerge
    bash make_merger.sh
-	 cp -r merge_wrapper.py merger quickmerge /usr/bin/
 
 
    #set up basecaller
@@ -73,6 +70,3 @@ from: neurodebian:jessie
 
 %runscript
    exec /bin/bash
-   export PATH=/root/quickmerge:/root/quickmerge/MUMmer3.23:$PATH
-	 cd medaka
-	 . ./venv/bin/activate
