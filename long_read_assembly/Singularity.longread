@@ -61,6 +61,7 @@ from: ubuntu:19.04
 	 mv quickmerge-0.2/ quickmerge
 	 cd quickmerge/
    bash make_merger.sh
+	 ln -s merger/quickmerge
 	 cd ..
 	 mv quickmerge /usr/bin/
 	 export PATH=/usr/bin/quickmerge/:/usr/bin/quickmerge/MUMmer3.23:$PATH
