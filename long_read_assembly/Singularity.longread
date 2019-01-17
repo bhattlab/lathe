@@ -62,6 +62,9 @@ from: ubuntu:19.04
 	 cd quickmerge/
    bash make_merger.sh
 	 ln -s merger/quickmerge
+	 (echo '#!/usr/bin/env python'; sed '1d' merge_wrapper.py ) > tmp
+	 mv tmp merge_wrapper.py
+	 chmod a+x merge_wrapper.py 
 	 cd ..
 	 mv quickmerge /usr/bin/
 	 export PATH=/usr/bin/quickmerge/:/usr/bin/quickmerge/MUMmer3.23:$PATH
