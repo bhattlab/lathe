@@ -41,6 +41,8 @@ from: ubuntu:19.04
     fi
 		export PATH="/usr/local/anaconda/bin:$PATH"
 
+		conda config --set remote_read_timeout_secs 600
+
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
        python>3.5 pilon bwa minimap2 canu=1.7.1 bcftools \
