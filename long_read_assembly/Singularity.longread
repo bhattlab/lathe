@@ -17,6 +17,7 @@ from: ubuntu:19.04
 # this command assumes at least singularity 2.3
 %environment
     PATH="/usr/local/anaconda/bin:/usr/bin/quickmerge/:/usr/bin/quickmerge/MUMmer3.23:$PATH"
+		PATH="/ont-guppy-cpu/bin/:$PATH"
 %post
     apt-get update
     apt-get install -y eatmydata
@@ -30,7 +31,6 @@ from: ubuntu:19.04
    #set up basecaller
    wget https://mirror.oxfordnanoportal.com/software/analysis/ont-guppy-cpu_2.3.1_linux64.tar.gz
 	 tar -zxf ont-guppy-cpu_2.3.1_linux64.tar.gz
-	 export PATH="/ont-guppy-cpu/bin/:$PATH"
 
     # install anaconda
     if [ ! -d /usr/local/anaconda ]; then
@@ -73,7 +73,6 @@ from: ubuntu:19.04
 	 chmod a+x merge_wrapper.py
 	 cd ..
 	 mv quickmerge /usr/bin/
-	 export PATH=/usr/bin/quickmerge/:/usr/bin/quickmerge/MUMmer3.23:$PATH
 
 	 pip install medaka
 
