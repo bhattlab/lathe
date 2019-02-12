@@ -27,7 +27,8 @@ for d in fast5_dirs:
 
 rule all:
 	input:
-		'{sample}/3b.final_assembly/{sample}.fa'.format(sample = sample)
+		'{sample}/3b.final_assembly/{sample}.fa'.format(sample = sample),
+		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
 
 rule basecall:
 	input: lambda wildcards: fast5_abspath_run_subfolder["/".join([wildcards.run, wildcards.subfolder])]
@@ -38,15 +39,20 @@ rule basecall:
 		mem=16
 	singularity: singularity_image
 	shell:
+		"guppy_basecaller --cpu_threads_per_caller {threads} -i {input} -s {sample}/0.basecall/raw_calls/{wildcards.run}/{wildcards.subfolder}/ " +
+		"--flowcell {fc} --kit {k}" .format(fc=config['flowcell'], k = config['kit'])
+
+'''
 		"read_fast5_basecaller.py -t {{threads}} -f {fc} -k {k} ".format(fc=config['flowcell'], k = config['kit']) +
 		" --save_path {sample}/0.basecall/raw_calls/{wildcards.run}/{wildcards.subfolder}/ " +
 		"-i {input} --output_format fastq"
+'''
 
 rule basecall_final:
 	input: expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
 	output: '{sample}/0.basecall/{sample}.fq'
 	shell:
-		"find {sample}/0.basecall/raw_calls/*/*/workspace/pass/*.fastq | xargs cat > {output}"
+		"find {sample}/0.basecall/raw_calls/*/*/*.fastq | xargs cat > {output}"
 
 rule nanoplot:
 	input: rules.basecall_final.output
@@ -69,14 +75,13 @@ rule assemble:
 	singularity: singularity_image if config['usegrid'] != 'True' else '' #switch between image and local environment for canu depending on whether cluster execution is required
 	shell:
 		"canu -p {sample}_{wildcards.genome_size} -d {sample}/1.assemble_{wildcards.genome_size}/ -nanopore-raw {input} " +
-		#"corOutCoverage=10000 corMhapSensitivity=high corMinCoverage=0 correctedErrorRate=0.16 " +
 		#"java=/usr/bin/java " + #this solves a problem on SCG whereby some nodes use a broken jvm
 		config['canu_args'] +
 		"stopOnReadQuality=false genomeSize={wildcards.genome_size} " +
-		"useGrid={grid} gnuplotTested=true gridOptions='{opts}'".format(
+		"useGrid={grid} gridOptions='{opts}'".format(
 			grid = config['usegrid'],
 			opts = config['grid_options']
-		) #maxThreads={threads}
+		)
 
 rule merge:
 	input: expand("{{sample}}/1.assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
