@@ -45,9 +45,9 @@ from: ubuntu:19.04
 
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
-       python>3.5 pilon bwa minimap2 canu=1.7.1 bcftools \
+       python>3.5 pilon bwa minimap2 canu=1.8 bcftools \
        bedtools bedops biopython tabix ncurses \
-       mummer circlator datrie
+       mummer circlator datrie nanoplot
 
    #removed to speed up setup
    #nanopolish jellyfish r-vegan r-ggplot2 r-plyr r-factoextra
