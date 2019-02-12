@@ -17,6 +17,7 @@ from: ubuntu:19.04
 # this command assumes at least singularity 2.3
 %environment
     PATH="/usr/local/anaconda/bin:/usr/bin/quickmerge/:/usr/bin/quickmerge/MUMmer3.23:$PATH"
+    PATH="/ont-guppy-cpu/bin/:$PATH"
 %post
     apt-get update
     apt-get install -y eatmydata
@@ -45,9 +46,9 @@ from: ubuntu:19.04
 
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
-       python>3.5 pilon bwa minimap2 canu=1.7.1 bcftools \
+       python>3.5 pilon bwa minimap2 canu=1.8 bcftools \
        bedtools bedops biopython tabix ncurses \
-       mummer circlator datrie
+       mummer circlator datrie nanoplot
 
    #removed to speed up setup
    #nanopolish jellyfish r-vegan r-ggplot2 r-plyr r-factoextra
