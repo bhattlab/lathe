@@ -27,6 +27,10 @@ from: ubuntu:19.04
 
     apt-get install -y build-essential
 
+   #set up basecaller
+   wget https://mirror.oxfordnanoportal.com/software/analysis/ont-guppy-cpu_2.3.1_linux64.tar.gz
+	 tar -zxf ont-guppy-cpu_2.3.1_linux64.tar.gz
+	 export PATH="/ont-guppy-cpu/bin/:$PATH"
 
     # install anaconda
     if [ ! -d /usr/local/anaconda ]; then
@@ -64,14 +68,10 @@ from: ubuntu:19.04
 	 ln -s merger/quickmerge
 	 (echo '#!/usr/bin/env python'; sed '1d' merge_wrapper.py ) > tmp
 	 mv tmp merge_wrapper.py
-	 chmod a+x merge_wrapper.py 
+	 chmod a+x merge_wrapper.py
 	 cd ..
 	 mv quickmerge /usr/bin/
 	 export PATH=/usr/bin/quickmerge/:/usr/bin/quickmerge/MUMmer3.23:$PATH
-
-   #set up basecaller
-   wget https://mirror.oxfordnanoportal.com/software/analysis/ont_albacore-2.3.4-cp36-cp36m-manylinux1_x86_64.whl
-   pip install ont_albacore-*_x86_64.whl
 
 	 pip install medaka
 
