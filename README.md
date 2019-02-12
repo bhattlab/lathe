@@ -21,8 +21,7 @@ git clone https://github.com/elimoss/metagenomics_workflows.git
 Snakemake does not have native support for SLURM. Instructions to enable Snakemake to schedule cluster jobs with SLURM can be found at https://github.com/bhattlab/slurm
 
 
-# long_read_assembly
-# Nanopore long read basecalling, assembly and post-processing workflow
+# long_read_assembly: Nanopore long read basecalling, assembly and post-processing workflow
 
 ### Note: it is highly recommended to run this workflow on a cluster.  
 
