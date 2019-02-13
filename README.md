@@ -29,7 +29,7 @@ Snakemake does not have native support for SLURM. Instructions to enable Snakema
 ### Alter config.yaml to provide the following:
  * **sample_name**: Name of sample and output directory
 
- * **fast5_dirs_list**: textual list of absolute paths to run/fast5/* subfolders containing .fast5 files
+ * **fast5_dirs_list**: textual list of absolute paths to run/fast5/* subfolders (which contain .fast5 files)
 
  * **fast5_parent_dir**: parent to the folders in the above file
 
