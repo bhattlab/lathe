@@ -55,7 +55,7 @@ For cluster Canu execution, please note: if set to True, you will need to instal
 To execute this workflow, please run the following.  Please note, you must substitute a parent directory containing all of your data and working directories for `/labs/`.  
 
 ```
-snakemake --use-singularity --singularity-args '--bind /labs/' -s path/to/metagenomics_workflows/long_read_assembly/Snakefile --configfile path/to/config.yaml
+snakemake --use-singularity --singularity-args '--bind /labs/' -s path/to/metagenomics_workflows/long_read_assembly/Snakefile --configfile path/to/config.yaml --restart-times 0
 ```
 
 
