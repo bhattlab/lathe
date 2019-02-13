@@ -30,9 +30,9 @@ Snakemake does not have native support for SLURM. Instructions to enable Snakema
 ### Alter config.yaml to provide the following:
  * **sample_name**: Name of sample and output directory
 
- * **fast5_dirs_list**: textual list of absolute paths to run/fast5/* subfolders containing .fast5 files
+ * **fast5_parent_dir**: parent to all folders in the below file
 
- * **fast5_parent_dir**: parent to the folders in the above file
+ * **fast5_dirs_list**: text file containing a list of absolute paths to run/fast5/* subfolders containing .fast5 files.  A good way to generate this is with `find -maxdepth 2 -mindepth 2 fast5_parent_dir > fodn.txt`
 
  * **flowcell**: flowcell code, e.g. FLO-MIN106, passed to basecaller
 
@@ -40,7 +40,7 @@ Snakemake does not have native support for SLURM. Instructions to enable Snakema
 
  * **genome_size**: Estimated genome size, e.g. 50m, passed to Canu.
 
- * **singularity**: location (including on the internet) of a singularity image to be used for the workflow.
+ * **singularity**: location (including on the internet) of a singularity image to be used for the workflow.  Don't change this.
 
  * **short_reads**: location of short reads to be used for Pilon polishing, or empty quotes for long-read polishing.
 
