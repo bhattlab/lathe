@@ -23,7 +23,7 @@ from: ubuntu:19.04
     apt-get install -y eatmydata
     eatmydata apt-get install -y wget bzip2 \
       ca-certificates libglib2.0-0 libxext6 libsm6 libxrender1 \
-      git
+      git bc
     apt-get clean
 
     apt-get install -y build-essential
