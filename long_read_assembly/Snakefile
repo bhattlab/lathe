@@ -11,7 +11,7 @@ because dynamic rule resolution does a file tree traversal, which is prohitively
 directory is anywhere below the current execution folder.
 '''
 
-localrules: plasmid_kmer_methyl, plasmid_dendro, pilon_ranges, pilon_aggregate_vcf, circlator_cleanup_tignames, final_assembly
+localrules: plasmid_kmer_methyl, plasmid_dendro, pilon_ranges, pilon_aggregate_vcf, cleanup_tignames, final_assembly, faidx
 
 sample = config['sample_name']
 fast5_dirs = [l.strip() for l in open(config['fast5_dirs_list'], 'r').readlines()]
@@ -28,7 +28,7 @@ for d in fast5_dirs:
 rule all:
 	input:
 		'{sample}/3b.final_assembly/{sample}.fa'.format(sample = sample),
-		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
+#		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
 
 rule basecall:
 	input: lambda wildcards: fast5_abspath_run_subfolder["/".join([wildcards.run, wildcards.subfolder])]
@@ -77,7 +77,7 @@ rule assemble:
 		"canu -p {sample}_{wildcards.genome_size} -d {sample}/1.assemble_{wildcards.genome_size}/ -nanopore-raw {input} " +
 		#"java=/usr/bin/java " + #this solves a problem on SCG whereby some nodes use a broken jvm
 		config['canu_args'] +
-		"stopOnReadQuality=false genomeSize={wildcards.genome_size} " +
+		" stopOnReadQuality=false genomeSize={wildcards.genome_size} " +
 		"useGrid={grid} gridOptions='{opts}'".format(
 			grid = config['usegrid'],
 			opts = config['grid_options']
@@ -133,6 +133,7 @@ rule faidx:
 	singularity: singularity_image
 	shell: "samtools faidx {input}"
 
+'''
 rule circlator:
 	input:
 		rules.merge.output,
@@ -149,18 +150,19 @@ rule circlator:
 		' --merge_min_id 85 --merge_breaklen 4000 --assembler canu ' + #--split_all_reads split all reads may be used with canu assembly
 		"--data_type nanopore-corrected --bwa_opts '-x ont2d' --merge_reassemble_end 50000 " + #"--merge_min_length_merge 500 " +
 		'{input} {sample}/2.circlator'
+'''
 
-rule circlator_cleanup_tignames:
-	input: rules.circlator.output
-	output: '{sample}/2.circlator/06.fixstart_cleannames.fasta'
+rule cleanup_tignames:
+	input: rules.merge.output
+	output: '{sample}/1a.merge/{sample}_merged_cleaned.fa' #'{sample}/2.circlator/06.fixstart_cleannames.fasta'
 	shell:
-		"cat {input} | sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
-		"cut -f1,9,17 | tr '\\t' '_' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}"
+		"cat {input} | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}" #sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
+		#"cut -f1,9,17 | tr '\\t' '_'
 
 rule medaka:
 	input:
 		rules.basecall_final.output,
-		rules.circlator_cleanup_tignames.output
+		rules.cleanup_tignames.output
 	output: '{sample}/3.medaka/consensus.fasta'
 	threads: 8
 	resources:
@@ -175,10 +177,10 @@ rule medaka:
 
 rule align_short_reads:
 	input:
-		rules.circlator_cleanup_tignames.output,
+		rules.cleanup_tignames.output,
 		config['short_reads'].split(',')
 	output: "{sample}/3a.pilon/short_reads.bam"
-	threads: 48
+	threads: 24
 	params:
 		reads = config['short_reads'].split(',')
 	resources:
@@ -190,8 +192,8 @@ rule align_short_reads:
 
 rule pilon_ranges:
 	input:
-		rules.circlator_cleanup_tignames.output,
-		rules.circlator_cleanup_tignames.output[0] + '.fai'
+		rules.cleanup_tignames.output,
+		rules.cleanup_tignames.output[0] + '.fai'
 	output: dynamic('{sample}/3a.pilon/ranges/{range}')
 	singularity: singularity_image
 	shell:
@@ -200,7 +202,7 @@ rule pilon_ranges:
 
 rule pilon_subsetrun:
 	input:
-		rules.circlator_cleanup_tignames.output,
+		rules.cleanup_tignames.output,
 		rules.align_short_reads.output,
 		rules.align_short_reads.output[0] + '.bai',
 		'{sample}/3a.pilon/ranges/{range}',
@@ -230,7 +232,7 @@ done; echo Using $i x of total coverage; \n \
 		"samtools view -h -O BAM -s $i {input[1]} {wildcards.range} > {params.bam};\n "
 		"samtools index {params.bam};\n "
 		"samtools faidx {input[0]} $(echo {wildcards.range}| cut -f1 -d ':') | cut -f1 -d ':' > {params.fa};\n " +
-		"/usr/bin/java -Xmx{params.java_mem}G -jar $(which pilon | sed 's/\/pilon//g')/../share/pilon*/pilon*.jar " +
+		"java -Xmx{params.java_mem}G -jar $(which pilon | sed 's/\/pilon//g')/../share/pilon*/pilon*.jar " +
 		"--genome {params.fa} " + #--targets {wildcards.range}
 		"--unpaired {params.bam} --output {sample}_{wildcards.range} --outdir {sample}/3a.pilon/sub_runs/{wildcards.range} " +
 		" --vcf --nostrays;\n " +
@@ -261,7 +263,7 @@ rule pilon_aggregate_vcf:
 '''
 rule pilon_consensus:
 	input:
-		rules.circlator_cleanup_tignames.output,
+		rules.cleanup_tignames.output,
 		rules.pilon_aggregate_vcf.output
 	output:
 		"{sample}/3a.pilon/{sample}_pilon.fa"
