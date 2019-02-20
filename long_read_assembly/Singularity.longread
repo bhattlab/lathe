@@ -32,6 +32,14 @@ from: ubuntu:19.04
    wget https://mirror.oxfordnanoportal.com/software/analysis/ont-guppy-cpu_2.3.1_linux64.tar.gz
 	 tar -zxf ont-guppy-cpu_2.3.1_linux64.tar.gz
 
+
+	 #set up canu
+	 git clone https://github.com/marbl/canu.git
+	 cd canu/src
+	 make
+	 cd ../Linux*/
+	 rsync -a . /usr/
+
     # install anaconda
     if [ ! -d /usr/local/anaconda ]; then
          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
@@ -45,7 +53,7 @@ from: ubuntu:19.04
 
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
-       python>3.5 pilon bwa minimap2 canu=1.8 bcftools \
+       python>3.5 pilon bwa minimap2 bcftools \
        bedtools bedops biopython tabix ncurses \
        mummer circlator datrie nanoplot
 
