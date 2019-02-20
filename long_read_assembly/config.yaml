@@ -10,5 +10,5 @@ singularity: "shub://elimoss/metagenomics_workflows:longread"
 #the below options are all related to Canu
 canu_args: ''
 usegrid: 'True' #should Canu use the grid?
-grid_options: '--time=6:00:00 --account asbhatt'
+grid_options: '--time=80:00:00 --account asbhatt'
 genome_size: '50m,100m'
