@@ -23,7 +23,7 @@ from: ubuntu:19.04
     apt-get install -y eatmydata
     eatmydata apt-get install -y wget bzip2 \
       ca-certificates libglib2.0-0 libxext6 libsm6 libxrender1 \
-      git bc
+      git bc rsync
     apt-get clean
 
     apt-get install -y build-essential
@@ -31,6 +31,14 @@ from: ubuntu:19.04
    #set up basecaller
    wget https://mirror.oxfordnanoportal.com/software/analysis/ont-guppy-cpu_2.3.1_linux64.tar.gz
 	 tar -zxf ont-guppy-cpu_2.3.1_linux64.tar.gz
+
+
+	 #set up canu
+	 git clone https://github.com/marbl/canu.git
+	 cd canu/src
+	 make
+	 cd ../Linux*/
+	 rsync -a . /usr/
 
     # install anaconda
     if [ ! -d /usr/local/anaconda ]; then
@@ -45,7 +53,7 @@ from: ubuntu:19.04
 
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
-       python>3.5 pilon bwa minimap2 canu=1.8 bcftools \
+       python>3.5 pilon bwa minimap2 bcftools \
        bedtools bedops biopython tabix ncurses \
        mummer circlator datrie nanoplot
 

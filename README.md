@@ -59,6 +59,16 @@ snakemake --use-singularity --singularity-args '--bind /labs/' -s path/to/metage
 ```
 
 
+For cluster Canu execution, please note: if set to True, you will need to install Canu in your environment:
+
+```
+	git clone https://github.com/marbl/canu.git
+	cd canu/src
+	make
+````
+as well as provide any additional required parameters for your job scheduler in the config.yaml file.  When executing on a cluster, Canu will appear to Snakemake to fail, as the first process does not produce an assembly, instead spawning a subsequent job on the cluster.  Don't worry, just re-run Snakemake when the assembly eventually completes.  You may need to add --cleanup-metadata <assembly> before Snakemake will continue.
+
+
 ### bin_label_and_evaluate
 
 Snakemake workflow for aligning, binning, classifying and evaluating a

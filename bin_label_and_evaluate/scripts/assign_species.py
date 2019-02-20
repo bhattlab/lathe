@@ -27,7 +27,7 @@ with open(krakf, 'r') as krak:
 			with open(binfaif, 'r') as binfai:
 				for l in krak.readlines():
 					s = l.rstrip().split("\t")
-					tig_species[s[0]] = '_'.join(s[1].split('|')[-1].split('_')[2:4])
+					tig_species[s[1]] = '_'.join(s[2].split(' ')[0:2])
 				for l in binfai.readlines():
 					s = l.rstrip().split("\t")
 					if s[0] in tig_species:
