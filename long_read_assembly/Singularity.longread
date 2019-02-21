@@ -40,10 +40,6 @@ from: ubuntu:19.04
 	 cd ../Linux*/
 	 rsync -a . /usr/
 
-	 #set up circlator in its own environment (so it can use an earlier version of canu)
-	 conda create -n circlator circlator canu=1.7.1-0 -c biobuilds -c bioconda
-
-
     # install anaconda
     if [ ! -d /usr/local/anaconda ]; then
          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
@@ -54,6 +50,9 @@ from: ubuntu:19.04
 		export PATH="/usr/local/anaconda/bin:$PATH"
 
 		conda config --set remote_read_timeout_secs 600
+
+		#set up circlator in its own environment (so it can use an earlier version of canu)
+		conda create -n circlator circlator canu=1.7.1-0 -c biobuilds -c bioconda
 
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
