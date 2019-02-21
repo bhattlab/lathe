@@ -40,6 +40,10 @@ from: ubuntu:19.04
 	 cd ../Linux*/
 	 rsync -a . /usr/
 
+	 #set up circlator in its own environment (so it can use an earlier version of canu)
+	 conda create -n circlator circlator canu=1.7.1-0 -c biobuilds -c bioconda
+
+
     # install anaconda
     if [ ! -d /usr/local/anaconda ]; then
          wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
@@ -55,7 +59,7 @@ from: ubuntu:19.04
     conda install -y -c conda-forge -c bioconda \
        python>3.5 pilon bwa minimap2 bcftools \
        bedtools bedops biopython tabix ncurses \
-       mummer circlator datrie nanoplot
+       mummer datrie nanoplot
 
    #removed to speed up setup
    #nanopolish jellyfish r-vegan r-ggplot2 r-plyr r-factoextra

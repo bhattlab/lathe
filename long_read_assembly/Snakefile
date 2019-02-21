@@ -139,15 +139,15 @@ rule circlator:
 		rules.unique_tignames.output,
 		'{{sample}}/1.assemble_{g}/{{sample}}_{g}.correctedReads.fasta.gz'.format(g = config['genome_size'].split(",")[0]),
 	output: '{sample}/2.circlator/06.fixstart.fasta'
-	threads: 8
+	threads: 16
 	resources:
 		time=80,
 		mem=200
 	singularity: singularity_image
 	shell:
 		"""
-		export PATH="~/moss/tools/assembly_and_scaffolding/canu-1.7.1/Linux-amd64/bin/:$PATH"
-		module add gcc
+		#export PATH="~/moss/tools/assembly_and_scaffolding/canu-1.7.1/Linux-amd64/bin/:$PATH"
+		conda activate circlator
 		rmdir {sample}/2.circlator/
 		circlator all --verbose --threads {threads} \
 		--merge_min_id 85 --merge_breaklen 4000 --assembler canu \
@@ -168,7 +168,7 @@ rule medaka:
 		rules.basecall_final.output,
 		rules.cleanup_tignames.output
 	output: '{sample}/3.medaka/consensus.fasta'
-	threads: 24
+	threads: 4
 	resources:
 		mem=16,
 		time=100
