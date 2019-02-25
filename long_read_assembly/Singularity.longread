@@ -16,7 +16,7 @@ from: ubuntu:19.04
 
 # this command assumes at least singularity 2.3
 %environment
-    PATH="/usr/local/anaconda/bin:/usr/bin/quickmerge/:/usr/bin/quickmerge/MUMmer3.23:$PATH"
+    PATH="/usr/local/anaconda/bin:/usr/bin/quickmerge/:$PATH" #:/usr/bin/quickmerge/MUMmer3.23
 		PATH="/ont-guppy-cpu/bin/:$PATH"
 %post
     apt-get update
@@ -51,14 +51,11 @@ from: ubuntu:19.04
 
 		conda config --set remote_read_timeout_secs 600
 
-		#set up circlator in its own environment (so it can use an earlier version of canu)
-		conda create -n circlator circlator canu=1.7.1-0 -c biobuilds -c bioconda
-
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
        python>3.5 pilon bwa minimap2 bcftools \
        bedtools bedops biopython tabix ncurses \
-       mummer datrie nanoplot
+       datrie nanoplot mummer4
 
    #removed to speed up setup
    #nanopolish jellyfish r-vegan r-ggplot2 r-plyr r-factoextra
