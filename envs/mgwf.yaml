@@ -20,7 +20,7 @@ dependencies:
   - samtools
   - ncurses
   - bedtools
-  - kraken
+  - kraken2
   - bwa
   - pip:
     - pysam
