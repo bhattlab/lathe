@@ -29,8 +29,8 @@ from: ubuntu:19.04
     apt-get install -y build-essential
 
    #set up basecaller
-   wget https://mirror.oxfordnanoportal.com/software/analysis/ont-guppy-cpu_2.3.1_linux64.tar.gz
-	 tar -zxf ont-guppy-cpu_2.3.1_linux64.tar.gz
+   wget https://mirror.oxfordnanoportal.com/software/analysis/ont-guppy-cpu_2.3.5_linux64.tar.gz
+	 tar -zxf ont-guppy-cpu*.tar.gz
 
 
 	 #set up canu
