@@ -1,17 +1,12 @@
-import os
-
 '''
 Long read assembly and post-processing Snakemake workflow
-Eli Moss
+for assembling genomes from metagenomes.
 
-A note on implementation: a few of the nanopolish rules, specifically those
-involving dynamic inputs/outputs required by nanopolish_makerange.py, don't rely on Snakemake
-to resolve the sample wildcard, instead specifying it with the sample variable below.  This is
-because dynamic rule resolution does a file tree traversal, which is prohitively slow if a fast5
-directory is anywhere below the current execution folder.
+Eli Moss
 '''
 
-localrules: plasmid_kmer_methyl, plasmid_dendro, pilon_ranges, pilon_aggregate_vcf,  cleanup_tignames, final_assembly, faidx
+import os
+localrules: pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final
 
 sample = config['sample_name']
 fast5_dirs = [l.strip() for l in open(config['fast5_dirs_list'], 'r').readlines()]
@@ -27,8 +22,11 @@ for d in fast5_dirs:
 
 rule all:
 	input:
-		'{sample}/3b.final_assembly/{sample}.fa'.format(sample = sample),
-#		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
+		"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
+		#"{sample}/4.final/{sample}_final.fa".format(sample = sample)
+
+#Basecalling and assembly
+#########################################################
 
 rule basecall:
 	input: lambda wildcards: fast5_abspath_run_subfolder["/".join([wildcards.run, wildcards.subfolder])]
@@ -60,16 +58,15 @@ rule nanoplot:
 rule assemble:
 	input: rules.basecall_final.output
 	output:
-		'{sample}/1.assemble_{genome_size}/{sample}_{genome_size}.contigs.fasta',
-		'{sample}/1.assemble_{genome_size}/{sample}_{genome_size}.correctedReads.fasta.gz'
+		'{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.contigs.fasta',
+		'{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.correctedReads.fasta.gz'
 	threads: 1
 	resources:
 		mem=100,
 		time=80
-	singularity: singularity_image if config['usegrid'] != 'True' else '' #switch between image and local environment for canu depending on whether cluster execution is required
+	singularity: singularity_image if config['usegrid'] != 'True' and config['usegrid'] != True else '' #switch between image and local environment for canu depending on whether cluster execution is required
 	shell:
-		"canu -p {sample}_{wildcards.genome_size} -d {sample}/1.assemble_{wildcards.genome_size}/ -nanopore-raw {input} " +
-		#"java=/usr/bin/java " + #this solves a problem on SCG whereby some nodes use a broken jvm
+		"canu -p {sample}_{wildcards.genome_size} -d {sample}/1.assemble/assemble_{wildcards.genome_size}/ -nanopore-raw {input} " +
 		config['canu_args'] +
 		" stopOnReadQuality=false genomeSize={wildcards.genome_size} " +
 		"useGrid={grid} gridOptions='{opts}'".format(
@@ -78,8 +75,8 @@ rule assemble:
 		)
 
 rule merge:
-	input: expand("{{sample}}/1.assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
-	output: "{sample}/1a.merge/{sample}_merged.fasta"
+	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
+	output: "{sample}/1.assemble/{sample}_merged.fasta"
 	resources:
 		time=6,
 		mem=24
@@ -87,103 +84,43 @@ rule merge:
 	shell:
 		"merge_wrapper.py {input} -pre {sample}/1a.merge/{sample}_merged; mv merged.fasta {output}"
 
-rule align_paf:
-	input:
-		'{ref}.f{asta}',
-		'{sample}/0.basecall/{sample}.fq'.format(sample = sample)
-	output:
-		"{ref}.f{asta}.paf"
-	threads: 8
-	singularity: singularity_image
-	shell:
-		"minimap2 -t {threads} -x map-ont {input} > {output}"
-
-rule align_bam:
-	input:
-		'{ref}.f{asta}', #the asta bit makes this work for .fa and .fasta files
-		'{sample}/0.basecall/{sample}.fq'.format(sample = sample)
-	output:
-		"{ref}.f{asta}.bam"
-	threads: 8
-	resources:
-		time=6,
-		mem=16
-	singularity: singularity_image
-	shell:
-		"minimap2 -t {threads} -ax map-ont {input} | samtools sort --threads {threads} > {output}"
-
-rule bam_idx:
-	input:
-		'{some}.bam'
-	output:
-		'{some}.bam.bai'
-	singularity: singularity_image
-	shell:
-		"samtools index {input}"
-
-rule faidx:
-	input: '{something}.f{asta}'
-	output: '{something}.f{asta}.fai'
-	singularity: singularity_image
-	shell: "samtools faidx {input}"
-
-rule unique_tignames:
+rule assemble_final:
 	input: rules.merge.output
-	output: '{sample}/1a.merge/{sample}_merged_cleaned.fa' #'{sample}/2.circlator/06.fixstart_cleannames.fasta' # #
+	output: '{sample}/1.assemble/{sample}_merged_cleaned.fa' #'{sample}/2.circlator/06.fixstart_cleannames.fasta' # #
 	shell:
-		"cat {input} | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}" #sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
+		"cat {input} | cut -f1 -d '_' | fold -w 120 | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}" #sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
 		#"cut -f1,9,17 | tr '\\t' '_'
 
-rule circlator:
-	input:
-		rules.unique_tignames.output,
-		'{{sample}}/1.assemble_{g}/{{sample}}_{g}.correctedReads.fasta.gz'.format(g = config['genome_size'].split(",")[0]),
-	output: '{sample}/2.circlator/06.fixstart.fasta'
-	threads: 16
-	resources:
-		time=80,
-		mem=200
-	singularity: singularity_image
-	shell:
-		"""
-		#export PATH="~/moss/tools/assembly_and_scaffolding/canu-1.7.1/Linux-amd64/bin/:$PATH"
-		conda activate circlator
-		rmdir {sample}/2.circlator/
-		circlator all --verbose --threads {threads} \
-		--merge_min_id 85 --merge_breaklen 4000 --assembler canu \
-		--data_type nanopore-corrected --bwa_opts '-x ont2d' --merge_reassemble_end 50000 \
-		{input} {sample}/2.circlator
-		"""
-#--split_all_reads split all reads may be used with canu assembly #"--merge_min_length_merge 500 "
+#Polishing
+#########################################################
 
-rule cleanup_tignames:
-	input: rules.circlator.output
-	output: '{sample}/2.circlator/06.fixstart_cleannames.fasta' #'{sample}/1a.merge/{sample}_merged_cleaned.fa'
-	shell:
-		"cat {input} | sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
-		"cut -f1,9,17 | tr '\\t' '_' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}"
+def choose_pilon_or_medaka():
+	if config['short_reads'] != '':
+		return(rules.pilon_consensus.output)
+	else:
+		return(rules.medaka.output)
 
 rule medaka:
 	input:
 		rules.basecall_final.output,
-		rules.cleanup_tignames.output
-	output: '{sample}/3.medaka/consensus.fasta'
-	threads: 4
+		rules.assemble_final.output
+	output: '{sample}/2.polish/medaka/consensus.fasta'
+	threads: 8
 	resources:
-		mem=16,
+		mem=32,
 		time=100
 	singularity: singularity_image
 	shell:
-		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/3.medaka -t {threads};'
+		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.polish/medaka -t {threads};'
 
 		#'export VIRTUAL_ENV_DISABLE_PROMPT=1; source /labs/asbhatt/moss/tools/long_read/medaka-0.3.0/venv/bin/activate; ' ++
 		#'deactivate'
 
 rule align_short_reads:
 	input:
-		rules.cleanup_tignames.output,
+		rules.assemble_final.output,
 		config['short_reads'].split(',')
-	output: "{sample}/3a.pilon/short_reads.bam"
+	output: "{sample}/2.polish/medaka/short_reads.bam"
 	threads: 24
 	params:
 		reads = config['short_reads'].split(',')
@@ -196,32 +133,33 @@ rule align_short_reads:
 
 rule pilon_ranges:
 	input:
-		rules.cleanup_tignames.output,
-		rules.cleanup_tignames.output[0] + '.fai'
-	output: dynamic('{sample}/3a.pilon/ranges/{range}')
+		rules.assemble_final.output,
+		rules.assemble_final.output[0] + '.fai'
+	output: dynamic('{sample}/2.polish/pilon/ranges/{range}')
 	singularity: singularity_image
 	shell:
 		"""
 		bedtools makewindows -w 100000 -g {input[1]} | awk '{{print $1,\":\", $2+ 1, \"-\", $3}}'  | tr -d ' ' |
-		xargs -n 1 -I foo touch {sample}/3a.pilon/ranges/foo
+		xargs -n 1 -I foo touch {sample}/2.polish/pilon/ranges/foo
 		"""
 
 rule pilon_subsetrun:
 	input:
-		rules.cleanup_tignames.output,
+		rules.assemble_final.output,
 		rules.align_short_reads.output,
 		rules.align_short_reads.output[0] + '.bai',
-		'{sample}/3a.pilon/ranges/{range}',
+		'{sample}/2.polish/pilon/ranges/{range}',
 	output:
-		'{sample}/3a.pilon/sub_runs/{range}/{sample}_{range}.vcf.gz'
+		'{sample}/2.polish/pilon/sub_runs/{range}/{sample}_{range}.vcf.gz'
 	resources:
 		time=lambda wildcards, attempt: 4 * attempt,
 		mem=lambda wildcards, attempt: 32 * attempt
 	singularity: singularity_image
 	params:
 		java_mem = 30,
-		bam = "{sample}/3a.pilon/sub_runs/{range}/{sample}_{range}.bam",
-		fa = "{sample}/3a.pilon/sub_runs/{range}/{sample}_{range}.fa"
+		bam = "{sample}/2.polish/pilon/sub_runs/{range}/{sample}_{range}.bam",
+		fa = "{sample}/2.polish/pilon/sub_runs/{range}/{sample}_{range}.fa",
+		subrun_folder = "{sample}/2.polish/pilon/sub_runs/{range}"
 	shell:
 		"""
 		# set env var $i to be the smallest read subset decimal (in increments of 0.1, with a couple very low values thrown in, too)
@@ -243,16 +181,16 @@ rule pilon_subsetrun:
 		samtools faidx {input[0]} $(echo {wildcards.range}| cut -f1 -d ':') | cut -f1 -d ':' > {params.fa}
 		java -Xmx{params.java_mem}G -jar $(which pilon | sed 's/\/pilon//g')/../share/pilon*/pilon*.jar \
 			--genome {params.fa} \
-			--unpaired {params.bam} --output {sample}_{wildcards.range} --outdir {sample}/3a.pilon/sub_runs/{wildcards.range} \
+			--unpaired {params.bam} --output {sample}_{wildcards.range} --outdir {params.subrun_folder} \
 			--vcf --nostrays
-		bgzip {sample}/3a.pilon/sub_runs/{wildcards.range}/{sample}_{wildcards.range}.vcf
-		tabix -fp vcf {sample}/3a.pilon/sub_runs/{wildcards.range}/{sample}_{wildcards.range}.vcf.gz
+		bgzip {params.subrun_folder}/{sample}_{wildcards.range}.vcf
+		tabix -fp vcf {params.subrun_folder}/{sample}_{wildcards.range}.vcf.gz
 		"""
 
 rule pilon_aggregate_vcf:
 	input:
 		dynamic(rules.pilon_subsetrun.output)
-	output: '{sample}/3a.pilon/all_corrections.vcf.gz'
+	output: '{sample}/2.polish/pilon/all_corrections.vcf.gz'
 	resources:
 		time=4,
 		mem=8
@@ -260,10 +198,10 @@ rule pilon_aggregate_vcf:
 	shell:
 		"""
 		#get header
-		(bcftools concat --naive {sample}/3a.pilon/sub_runs/*/*.vcf.gz | zcat | head -100000 | grep ^# || true
+		(bcftools concat --naive {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz | zcat | head -100000 | grep ^# || true
 
 		#get corrections
-		bcftools concat --naive {sample}/3a.pilon/sub_runs/*/*.vcf.gz | zcat | grep -v ^# | grep -v '0/0' | sort -u -k1,1d -k2,2g | grep -v SVTYPE) |
+		bcftools concat --naive {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz | zcat | grep -v ^# | grep -v '0/0' | sort -u -k1,1d -k2,2g | grep -v SVTYPE) |
 
 		#compress and store
 		bgzip > {output}
@@ -274,267 +212,262 @@ rule pilon_aggregate_vcf:
 
 rule pilon_consensus:
 	input:
-		rules.cleanup_tignames.output,
+		rules.assemble_final.output,
 		rules.pilon_aggregate_vcf.output
 	output:
-		"{sample}/3a.pilon/{sample}_pilon.fa"
+		"{sample}/2.polish/pilon/{sample}_pilon.fa"
 	singularity: singularity_image
 	shell:
 		"bcftools consensus -f {input} -o {output}"
 
-def choose_pilon_or_medaka():
-	if config['short_reads'] != '':
-		return(rules.pilon_consensus.output)
-	else:
-		return(rules.medaka.output)
-
-rule final_assembly:
-	#select a method of polishing, and clean up and deduplicate contig names
+rule polish_final:
 	input: choose_pilon_or_medaka()
-	output: "{sample}/3b.final_assembly/{sample}.fa"
-	shell:
-		"cat {input} | sed -r 's/(tig[0-9]{{8}}):[^a-z]*/\\1_/g' | sed 's/_$//g' > {output}" #| sed 's/\.tig/\ttig/g' | tr '_' '\t' | " +
-		#"cut -f1,9,17 | tr '\t' '_' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;'
+	output: "{sample}/2.polish/{sample}_polished.fa"
+	shell: "cp {input} {output}" #no modifications needed
 
-rule tombo_annotate:
+#Circularization
+#########################################################
+
+def skip_circularization_or_not():
+	if config['skip_circularization'] == 'True' or config['skip_circularization'] == True:
+		return(rules.polish_final.output)
+	else:
+		return(rules.circularize_final.output)
+
+rule circularize_mapreads:
 	input:
-		#lambda wildcards: "{s}/0.basecall/raw_calls/{f1}/{f2}/sequencing_summary.txt".format(s = sample, f1 = wildcards.dir.split('___')[0], f2 = wildcards.dir.split('___')[1])
-		#this horrible input specifies the precise basecalling run needed for this batch of reads.  It is simpler to require that all basecalling be complete, but less correct.
-		rules.basecall_final.output
-	output: '{sample}/4.tombo/0.annotate/{dir}_ANNOTATED'
-	threads: 1
+		rules.polish_final.output,
+		'{sample}/1.assemble/assemble_{g}/{sample}_{g}.correctedReads.fasta.gz'.format(
+			g = config['genome_size'].split(",")[0],
+			sample = sample)
+	output:
+		"{sample}/3.circularization/0.aligned_corrected.bam",
+		"{sample}/3.circularization/0.aligned_corrected.bam.bai",
+	threads: 8
 	resources:
-		time=lambda wildcards, attempt: 6 * (2**(attempt - 1)),
-		mem=8
-	params:
-		dir_to_annotate = lambda wildcards: fast5_abspath_run_subfolder[wildcards.dir.replace('___', '/')],
-		f1 = lambda wildcards: wildcards.dir.split('___')[0],
-		f2 = lambda wildcards: wildcards.dir.split('___')[1]
+		time=6,
+		mem=32
 	singularity: singularity_image
 	shell:
-		"source activate tombo && " +
-		"tombo preprocess annotate_raw_with_fastqs --overwrite --fast5-basedir {params.dir_to_annotate} " +
-		"--fastq-filenames $(ls {sample}/0.basecall/raw_calls/{params.f1}/{params.f2}/workspace/pass/*.fastq) " +
-	 	"--sequencing-summary-filenames {sample}/0.basecall/raw_calls/{params.f1}/{params.f2}/sequencing_summary.txt " +
-	 	"--processes {threads} && touch {output}"
+		"""
+		minimap2 {input} -ax map-ont -t {threads} | samtools sort --threads {threads} > {output[0]}
+		samtools index {output[0]}
+		"""
 
-rule tombo_resquiggle:
+rule extract_bigtigs:
 	input:
-		rules.final_assembly.output,
-		'{sample}/4.tombo/0.annotate/{dir}_ANNOTATED'
+		rules.polish_final.output,
+		rules.polish_final.output[0] + ".fai",
+	output: dynamic("{sample}/3.circularization/1.candidate_genomes/{tig}.fa")
+	singularity: singularity_image
+	params:
+		min_size = 2000000
+	shell:
+		"""
+		cat {input[1]} | awk '{{if ($2 > {params.min_size}) print $1}}' | xargs -n 1 -I foo sh -c "
+			samtools faidx {input[0]} foo > {sample}/3.circularization/1.candidate_genomes/foo.fa
+		"
+		"""
+
+rule circularize_bam2reads:
+	input:
+		rules.circularize_mapreads.output,
+		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa" #rules.extract_bigtigs.output
 	output:
-		'{sample}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED'
-	threads: 1
+		"{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}_terminal_reads.fq.gz"
+	singularity: singularity_image
+	shell:
+		"""
+		(samtools idxstats {sample}/3.circularization/0.aligned_corrected.bam | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", $2-50000, "-", $2; else print $1, ":", 1, "-", $2 }}' | tr -d ' ';
+		 samtools idxstats {sample}/3.circularization/0.aligned_corrected.bam | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", 1, "-", 50000; else print $1, ":", 1, "-", $2 }}' | tr -d ' ') |
+		xargs -I foo sh -c 'samtools view -h {sample}/3.circularization/0.aligned_corrected.bam foo | samtools fastq - || true' | bgzip > {output}
+		"""
+
+rule circularize_assemble:
+	input:
+		rules.circularize_bam2reads.output
+	output: "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}.contigs.fasta"
+	params:
+		directory="{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}",
+	singularity: singularity_image if config['usegrid'] != 'True' and config['usegrid'] != True else '' #switch between image and local environment for canu depending on whether cluster execution is required
 	resources:
-		time=lambda wildcards, attempt: 12 * (2**(attempt - 1)),
-		mem=8
+		time=12,
+		mem=50
+	threads: 8
+	shell:
+		"""
+		canu -useGrid=False -assemble -p {wildcards.tig} -d {params.directory}  \
+		-nanopore-corrected {input} genomeSize=100000
+		"""
+
+		# """
+		# canu -useGrid=False -assemble -p {params.prefix} -d {params.directory}  \
+		# -nanopore-corrected {input} genomeSize=100000 gridOptions='{params.gridopts}' \
+		# batMemory=128 batThreads=1
+		# """
+
+rule circularize_spantig_pre:
+	input:
+		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa", #rules.extract_bigtigs.output
+		rules.circularize_assemble.output,
+		rules.circularize_assemble.output[0] + '.fai'
+	output:
+		"{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/potential_circularization_alignments.tsv"
+	singularity: singularity_image
 	params:
-		dir_to_squiggle = lambda wildcards: fast5_abspath_run_subfolder[wildcards.dir.replace('___', '/')],
-		index_filename = lambda wildcards: '../.' + wildcards.dir.split('___')[1] + '.RawGenomeCorrected_000.tombo.index'
-	singularity: singularity_image
-	shell:
-		"source activate tombo; " +
-		"tombo resquiggle --overwrite {params.dir_to_squiggle} " +
-		"{input[0]} --processes {threads} --num-most-common-errors 5 && " +
-		"ln {params.dir_to_squiggle}/{params.index_filename} {output}"
-
-rule tombo_detect:
-	input: expand('{{sample}}/4.tombo/1.resquiggle/{dir}_RESQUIGGLED', dir = [d.replace('/', '___') for d in fast5_abspath_run_subfolder])
-	output:
-		#'{sample}/4.tombo/readstats.{methyl}.tombo.per_read_stats',
-		protected('{sample}/4.tombo/stats.{methyl}.tombo.stats')
-	threads: 48
-	resources:
-		mem=lambda wildcards, attempt: 100 * attempt,
-		time=lambda wildcards, attempt: 48 * attempt
-	params:
-		fast5_dirs = [d for d in fast5_run_subfolder_abspath]
-	singularity: singularity_image
-	shell:
-		"source activate tombo && " +
-		"tombo detect_modifications alternative_model --fast5-basedirs {params.fast5_dirs} " +
-	 	"--statistics-file-basename {sample}/4.tombo/stats " +
-	 	#"--per-read-statistics-basename {sample}/4.tombo/readstats " +
-	 	"--alternate-bases {wildcards.methyl} --processes {threads} --dna "
-
-rule tombo_wig:
-	input:
-		rules.tombo_detect.output,
-	output:
-		"{sample}/4.tombo/{sample}_{methyl}_sites.fraction_modified_reads.plus.wig"
-	singularity: singularity_image
-	shell:
-		"source activate tombo; " +
-		"tombo text_output browser_files --browser-file-basename {sample}/4.tombo/{sample}_{wildcards.methyl}_sites " +
-		"--file-type fraction --statistics-filename {input} "
-
-rule tombo_bed_fasta:
-	input:
-		rules.tombo_wig.output,
-		rules.final_assembly.output,
-	output:
-		"{sample}/4.tombo/{sample}_{methyl}_sites.bed",
-		"{sample}/4.tombo/{sample}_{methyl}_sites.fa"
-	params:
-		meth_frac = 0.5,
-		site_radius = 2
-	singularity: singularity_image
-	shell:
-		"cat {input[0]} | wig2bed | " +
-		"awk '{{if ($5 > {params.meth_frac}) print $1, $2-{params.site_radius}, $3+{params.site_radius}, $4, $5}}' | " +
-		"tr ' ' '\\t' | awk '{{if ($2 < 0) print $1, 0, $3, $4, $5; else print $0}}' | tr ' ' '\\t' > {output[0]}; " +
-		"bedtools getfasta -s -fi {input[1]} -bed {output[0]} | tr -d '()' > {output[1]}"
-
-rule plasmid_kmer_methyl:
-	input:
-		rules.tombo_bed_fasta.output,
-		rules.final_assembly.output[0] + '.fai'
-	output: dynamic("{sample}/tmp_kmer_methyl_{methyl}/jellyfish/tsv/{tig}.tsv")
-	params:
-		kmer_length = 5
-	singularity: singularity_image
-	shell:
-		"mkdir -p {sample}/tmp_kmer_methyl_{wildcards.methyl}/fa {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/db {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/tsv;\n" +
-		"cut -f1 {input[2]} | xargs -n 1 -I foo sh -c \"grep -A1 foo {input[1]} > {sample}/tmp_kmer_methyl_{wildcards.methyl}/fa/foo_sites.fa\";\n" +
-		"cut -f1 {input[2]} | xargs -n 1 -I foo sh -c \"  \
-jellyfish count -C {sample}/tmp_kmer_methyl_{wildcards.methyl}/fa/foo_sites.fa -m {params.kmer_length} -s 10000 -o {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/db/foo.jf; \
-jellyfish dump {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/db/foo.jf --tab --column | sort -k1,1 > {sample}/tmp_kmer_methyl_{wildcards.methyl}/jellyfish/tsv/foo.tsv\";\n "
-
-rule plasmid_kmer_methyl_join:
-	input: dynamic("{sample}/tmp_kmer_methyl_{{methyl}}/jellyfish/tsv/{{tig}}.tsv".format(sample = sample))
-	output: "{sample}/5.assign_plasmids/kmer/methyl_kmers_{methyl}.tsv"
-	run:
-		"join_several {input} > {output}"
-	#script:
-	#	"scripts/join_several2.py"
-
-rule plasmid_kmer_tig:
-	input:
-		rules.final_assembly.output[0],
-		rules.final_assembly.output[0] + '.fai'
-	output: dynamic("{sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/{tig}.tsv")
-	params:
-		kmer_length = 5
-	singularity: singularity_image
-	shell:
-		"mkdir -p {sample}/tmp_kmer_wholetig/jellyfish/whole_tsv {sample}/tmp_kmer_wholetig/jellyfish/db {sample}/tmp_kmer_wholetig/fa; \n" +
-		"cat {input[1]} | cut -f1 | xargs -n1 -I foo -P 8 sh -c 'samtools faidx {input[0]} foo > {sample}/tmp_kmer_wholetig/fa/foo.fa; \n\
-jellyfish count -C {sample}/tmp_kmer_wholetig/fa/foo.fa -m {params.kmer_length} -s 10000 -o {sample}/tmp_kmer_wholetig/jellyfish/db/foo.jf; \n\
-jellyfish dump {sample}/tmp_kmer_wholetig/jellyfish/db/foo.jf --tab --column | sort -k1,1 > {sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/foo.tsv'; \n"
-
-rule plasmid_kmer_tig_join:
-	input: dynamic("{sample}/tmp_kmer_wholetig/jellyfish/whole_tsv/{{tig}}.tsv".format(sample = sample))
-	output:"{sample}/5.assign_plasmids/kmer/tig_kmers.tsv",
-	run:
-		"join_several {input} > {output}"
-	#script:
-	# 	"scripts/join_several2.py"
-
-rule plasmid_dendro_prebin:
-	input:
-		"{sample}/5.assign_plasmids/kmer/methyl_kmers_5mC.tsv",
-		"{sample}/5.assign_plasmids/kmer/methyl_kmers_6mA.tsv",
-		rules.plasmid_kmer_tig_join.output
-	output:
-		"{sample}/5.assign_plasmids/pre_binning_steps_done"
-	shell:
-		"touch {output}"
-
-rule plasmid_list:
-	input:
-		rules.final_assembly.output,
-		rules.final_assembly.output[0] + '.fai'
-	output:
-		"{sample}/5.assign_plasmids/plasmids.tsv"
-	shell:
-		"cut -f2 {input[1]} | xargs -n 1 -I foo grep foo {input[2]} | awk '{{if ($2 < 1000000) print $0}}' > {output}"
-
-rule plasmid_dendro:
-	input:
-		"{sample}/5.assign_plasmids/kmer/methyl_kmers_5mC.tsv",
-		"{sample}/5.assign_plasmids/kmer/methyl_kmers_6mA.tsv",
-		"{sample}/5.assign_plasmids/kmer/tig_kmers.tsv",
-		"{sample}/5.assign_plasmids/bin_tig_mapping.tsv",
-		"{sample}/5.assign_plasmids/plasmids.tsv",
-		"{sample}/5.assign_plasmids/species_assignments.tsv",
-	output:
-		"{sample}/5.assign_plasmids/dendro.pdf"
-	script:
-	 	'scripts/plasmid_dendro.R'
-
-
-#could be integrated into binning workflow:
-#ls *.fai | xargs -n 1 -I foo sh -c "cat foo | sed 's/^/foo\t/g'" | sed 's/.fa.fai//g' | cut -f1,2 > ../bin_tig_mapping.tsv
-
-
-rule nanopolish_index_fofn:
-	input:
-		expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
-	output:
-		"{sample}/4.nanopolish/seq_summ_fofn.list"
-	run:
-		f = open(output[0], 'w')
-		f.write("\n".join(input))
-		f.close()
-
-rule nanopolish_index:
-	input:
-		rules.nanopolish_index_fofn.output,
-		config['fast5_parent_dir'],
-		rules.basecall_final.output
-	output:
-		rules.basecall_final.output[0] + '.index'
-	resources:
-		time=48
-	shell:
-		"nanopolish index --verbose -f {input[0]} -d {input[1]} {input[2]}" #.format(blar = " -d ".join(fast5_dirs))
-
-rule nanopolish_ranges:
-	input: rules.final_assembly.output
-	output: dynamic('{sample}/4.nanopolish/ranges/{range}')
-	shell:
-		"nanopolish_makerange.py {input} | xargs -n 1 -I foo touch {sample}/4.nanopolish/ranges/foo"
-
-rule nanopolish:
-	input:
-		'{sample}/4.nanopolish/ranges/{range}',
-		rules.basecall_final.output,
-		rules.final_assembly.output[0] + '.bam',
-		rules.final_assembly.output,
-		rules.final_assembly.output[0] + '.bam.bai',
-		rules.nanopolish_index.output,
-	output:
-		"{sample}/4.nanopolish/range_vcfs/{sample}_{range}.vcf"
+		directory = "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}",
+		prefix="spanning_tigs_to_ref"
 	threads: 4
 	resources:
-		time= lambda wildcards, attempt: 48 * attempt, #this may be reduced if it incurs scheduling delays
+		time=4,
 		mem=16
 	shell:
-		"nanopolish variants --fix-homopolymers " + #--max-haplotypes=10000 " +
-		"--consensus -o {output} -w {wildcards.range} -r {input[1]} " +
-		"-b {input[2]} -g {input[3]} -t {threads} --min-candidate-frequency 0.1"
+		"""
+		nucmer -t {threads} -b 5000 {input[0]} {input[1]} -p {params.directory}/{params.prefix}
 
-rule nanopolish_final:
+		delta-filter -q {params.directory}/{params.prefix}.delta > {params.directory}/{params.prefix}.filt.delta
+
+		show-coords -Tq {params.directory}/{params.prefix}.filt.delta | cut -f8,9 | sed '1,3d' | sort | \
+		uniq -c | tr -s ' ' '\\t' | cut -f2-99 | grep -v ^1 | cut -f2,3 > {params.directory}/potential_circularizations.tsv
+		#|| echo 'no circularizations'
+
+		show-coords -Tql {params.directory}/{params.prefix}.filt.delta | grep -f {params.directory}/potential_circularizations.tsv > {output}
+		#|| echo 'no circularizations'
+		"""
+
+rule circularize_spantig:
+	input: rules.circularize_spantig_pre.output
+	output: "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/contig_spanned.txt"
+	params:
+		margin=10000
+	script:
+		"scripts/spancircle.py"
+
+rule circularize_span_trim:
 	input:
-		rules.final_assembly.output,
-		dynamic(rules.nanopolish.output)
+		rules.circularize_spantig.output,
+		rules.extract_bigtigs.output,
+		rules.extract_bigtigs.output[0] + '.fai',
+		rules.circularize_assemble.output,
+		rules.circularize_assemble.output[0] + '.fai'
 	output:
-		"{sample}/4.nanopolish/{sample}_nanopolish.fa"
+		"{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_trim.sh"
+	params:
+		outfa = "{sample}/3.circularization/3.circular_sequences/{tig}_spanned.fa"
+	run:
+		span_out = open(input[0], 'r').readlines()
+		cmd = ''
+		if span_out == ['done\n'] or span_out[0].strip() == 'no circularizations': #no circularization occurred
+			print('Nothing to do')
+		else:
+			trim = span_out[0].strip()
+			trim_cmd = 'samtools faidx ' + input[1] + ' ' + trim + " > " + params.outfa + "\n"
+			cmd += trim_cmd
+
+			if len(span_out) == 3:
+				extend = span_out[1].strip()
+				extend_cmd = 'samtools faidx ' + input[3] + ' ' + extend + " | grep -v '>'" + " >> " + params.outfa + "\n"
+	#			print(extend_cmd)
+				cmd += extend_cmd
+
+		open(output[0], 'w').write(cmd + '\n')
+
+rule circularize_overcirc:
+	input:
+		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa"
+	output: "{sample}/3.circularization/2.circularization/overcircularized/overcirc_{tig}.txt"
+	params:
+		delta = '{sample}/3.circularization/2.circularization/overcircularized/{tig}.delta'
+	threads: 8
+	singularity: singularity_image
+	script:
+		"scripts/encircle.py"
+
+rule circularize_overcirc_trim:
+	input:
+		rules.circularize_overcirc.output,
+		rules.extract_bigtigs.output,
+		rules.extract_bigtigs.output[0] + '.fai',
+		rules.circularize_assemble.output,
+		rules.circularize_assemble.output[0] + '.fai'
+	output:
+		"{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_overcirc.sh"
+	params:
+		outfa = "{sample}/3.circularization/3.circular_sequences/{tig}_overcirc.fa"
+	run:
+		span_out = open(input[0], 'r').readlines()
+		cmd = ''
+		if span_out == ['done\n']: #no circularization occurred
+			print('Nothing to do')
+		else:
+			trim = span_out[0].strip()
+			trim_cmd = 'samtools faidx ' + input[1] + ' ' + trim + " > " + params.outfa + "\n"
+			cmd += trim_cmd
+
+		open(output[0], 'w').write(cmd + '\n')
+
+rule circularize_final:
+	input:
+		rules.assemble_final.output,
+		rules.assemble_final.output[0] + '.fai',
+		dynamic(rules.circularize_overcirc_trim.output),
+		dynamic(rules.circularize_span_trim.output),
+	output:
+		'{sample}/3.circularization/4.{sample}_circularized.fa',
+		#temp('circs.tmp')
+	params:
+		assembly = lambda wildcards: rules.circularize_assemble.output[0]
+	threads: 1
 	shell:
-		"nanopolish vcf2fasta -g {input[0]} {sample}/4.nanopolish/range_vcfs/* > {output}"
+		"""
+		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1 -d '_' > {output[1]}
+		(cat {input[1]} | grep -vf {output[1]} |
+		cut -f1 | xargs samtools faidx {input[0]}; cat {sample}/3.circularization/3.circular_sequences/*.fa) > {output[0]}
+		"""
 
-rule nanopolish_call_methylation:
+rule final:
+	input: skip_circularization_or_not()
+	output: "{sample}/4.final/{sample}_final.fa"
+	shell: "cp {input} {output}"
+#Utility functions
+#########################################################
+
+rule align_paf:
 	input:
-		rules.basecall_final.output,
-		'{sample}/3.circlize/06.fixstart.fasta.bam',
-		rules.final_assembly.output,
-		rules.nanopolish_index.output
+		'{ref}.f{asta}',
+		'{sample}/0.basecall/{sample}.fq'.format(sample = sample)
 	output:
-		'{sample}/4.nanopolish/{sample}-{methylation_type}.tsv'
-	threads: 24
+		"{ref}.f{asta}.paf"
+	threads: 8
+	singularity: singularity_image
+	shell:
+		"minimap2 -t {threads} -x map-ont {input} > {output}"
+
+rule align_bam:
+	input:
+		'{ref}.f{asta}', #the asta bit makes this work for .fa and .fasta files
+		'{sample}/0.basecall/{sample}.fq'.format(sample = sample)
+	output:
+		"{ref}.f{asta}.bam"
+	threads: 16
 	resources:
-		time=24,
-		mem=24
+		time=6,
+		mem=16
+	singularity: singularity_image
 	shell:
-		"nanopolish call-methylation --reads {input[0]} --bam {input[1]} --genome {input[2]}" +
-		"--threads {threads} --methylation {wildcards.methylation_type} > {output}"
+		"minimap2 -t {threads} -ax map-ont {input} | samtools sort --threads {threads} > {output}"
+
+rule bam_idx:
+	input:
+		'{some}.bam'
+	output:
+		'{some}.bam.bai'
+	singularity: singularity_image
+	shell:
+		"samtools index {input}"
+
+rule faidx:
+	input: '{something}.f{asta}'
+	output: '{something}.f{asta}.fai'
+	singularity: singularity_image
+	shell: "samtools faidx {input}"

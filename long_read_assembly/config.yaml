@@ -6,9 +6,10 @@ flowcell: 'FLO-MIN106'
 kit: 'SQK-LSK109'
 short_reads: '' #Comma-separated forward and reverse optionally gzipped fastq files.  Optional.  If no reads are given, the pilon step is skipped.
 singularity: "shub://elimoss/metagenomics_workflows:longread"
+skip_circlator: False
 
 #the below options are all related to Canu
 canu_args: ''
-usegrid: 'True' #should Canu use the grid?
+usegrid: True #should Canu use the grid?
 grid_options: '--time=80:00:00 --account asbhatt'
 genome_size: '50m,100m'

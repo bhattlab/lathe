@@ -63,6 +63,7 @@ For cluster Canu execution, please note: if set to True, you will need to instal
 	git clone https://github.com/marbl/canu.git
 	cd canu/src
 	make
+	#put compiled executables on your PATH
 ````
 as well as provide any additional required parameters for your job scheduler in the config.yaml file.  When executing on a cluster, Canu will appear to Snakemake to fail, as the first process does not produce an assembly, instead spawning a subsequent job on the cluster.  Don't worry, just re-run Snakemake when the assembly eventually completes.  You may need to add --cleanup-metadata <assembly> before Snakemake will continue.
 
