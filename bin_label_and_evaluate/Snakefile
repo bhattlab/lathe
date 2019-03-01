@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins, bin_tig_mapping
+localrules: bwa_index_setup, postprocess_raw, postprocess_final, label_bins, bin_tig_mapping, metabat
 
 samp = config['sample']
 if 'reads2' in config and not config['reads2'] == '':
@@ -86,7 +86,7 @@ rule align_lr:
 	resources:
 		mem=48,
 		time=6
-	threads: 32
+	threads: 16
 	shell:
 		"minimap2 -t {threads} -ax map-ont {input} | samtools sort --threads {threads} > {output}"
 
@@ -108,7 +108,7 @@ rule metabat:
 	resources:
 		mem=64,
 		time=24
-	threads: 24
+	threads: 4
 	shell:
 		'metabat2 --seed 1 -t {threads} --unbinned --inFile {samp}/idx/{samp}.fa ' +
 		'--outFile {samp}/bins/bin --abdFile {samp}/{samp}.fa.depth.txt'
@@ -177,10 +177,10 @@ rule prokka:
 	resources:
 		mem=48,
 		time=1,
-	threads: 16
+	threads: 8
 	shell:
 		"prokka {input} --outdir {samp}/prokka/{wildcards.bin}.fa " +
-		"--prefix {samp}_{wildcards.bin}.fa --centre X --compliant --force --cpus {threads}"
+		"--prefix {samp}_{wildcards.bin}.fa --centre X --compliant --force --cpus {threads} --noanno"
 
 rule bam_idx:
 	input:
@@ -280,12 +280,12 @@ rule label_bins:
 
 rule postprocess_raw:
 	input:
-		dynamic(rules.prokka.output),
-		dynamic(rules.quast.output),
+#		dynamic(rules.prokka.output),
+	#	dynamic(rules.quast.output),
 		rules.checkm.output,
-		dynamic(rules.aragorn.output),
-		dynamic(rules.barrnap.output),
-		dynamic(rules.bin_coverage.output),
+		#dynamic(rules.aragorn.output),
+		#dynamic(rules.barrnap.output),
+		#dynamic(rules.bin_coverage.output),
 		rules.label_bins.output
 	output:
 		"{samp}/final/prokka.tmp",
