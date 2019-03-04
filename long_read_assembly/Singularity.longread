@@ -57,10 +57,7 @@ from: ubuntu:19.04
        bedtools bedops biopython tabix ncurses \
        datrie nanoplot mummer4
 
-   #removed to speed up setup
-   #nanopolish jellyfish r-vegan r-ggplot2 r-plyr r-factoextra
-
-   conda install -y -c biobuilds samtools
+   conda install -y -c biobuilds samtools openssl=1.0
 
 
    # tombo for methylation
