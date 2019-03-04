@@ -20,20 +20,22 @@ for d in fast5_dirs:
 	fast5_abspath_run_subfolder[run_subfolder] = d
 	fast5_run_subfolder_abspath[d] = run_subfolder
 
+
+#BUG: due to a problem with having multiple dynamic wildcards, the second output in rule all must be commented out until after the first has been generated.
 rule all:
 	input:
 		"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
-		#"{sample}/4.final/{sample}_final.fa".format(sample = sample)
-
+		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
+		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
 #Basecalling and assembly
 #########################################################
 
 rule basecall:
 	input: lambda wildcards: fast5_abspath_run_subfolder["/".join([wildcards.run, wildcards.subfolder])]
-	output: '{sample}/0.basecall/raw_calls/{run}/{subfolder}/sequencing_summary.txt' #workspace/pass/') #sequencing_summary.txt'
+	output: '{sample}/0.basecall/raw_calls/{run}/{subfolder}/sequencing_summary.txt'
 	threads: 4
 	resources:
-		time=6,
+		time=2,
 		mem=16
 	singularity: singularity_image
 	shell:
@@ -82,7 +84,7 @@ rule merge:
 		mem=24
 	singularity: singularity_image
 	shell:
-		"merge_wrapper.py {input} -pre {sample}/1a.merge/{sample}_merged; mv merged.fasta {output}"
+		"merge_wrapper.py {input} -pre {sample}/1.assemble/{sample}_merged; mv merged.fasta {output}"
 
 rule assemble_final:
 	input: rules.merge.output
@@ -105,13 +107,13 @@ rule medaka:
 		rules.basecall_final.output,
 		rules.assemble_final.output
 	output: '{sample}/2.polish/medaka/consensus.fasta'
-	threads: 8
+	threads: 16
 	resources:
 		mem=32,
 		time=100
 	singularity: singularity_image
 	shell:
-		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.polish/medaka -t {threads};'
+		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.polish/medaka -t {threads} -m r941_flip213;'
 
 		#'export VIRTUAL_ENV_DISABLE_PROMPT=1; source /labs/asbhatt/moss/tools/long_read/medaka-0.3.0/venv/bin/activate; ' ++
 		#'deactivate'
@@ -218,12 +220,17 @@ rule pilon_consensus:
 		"{sample}/2.polish/pilon/{sample}_pilon.fa"
 	singularity: singularity_image
 	shell:
-		"bcftools consensus -f {input} -o {output}"
+		"""
+		bcftools consensus -f {input} -o {output} && rm -rf {sample}/2.polish/pilon/sub_runs {sample}/2.polish/pilon/ranges
+		"""
 
 rule polish_final:
 	input: choose_pilon_or_medaka()
 	output: "{sample}/2.polish/{sample}_polished.fa"
-	shell: "cp {input} {output}" #no modifications needed
+	shell:
+		"""
+		cp {input} {output}
+		"""
 
 #Circularization
 #########################################################
@@ -328,11 +335,9 @@ rule circularize_spantig_pre:
 		delta-filter -q {params.directory}/{params.prefix}.delta > {params.directory}/{params.prefix}.filt.delta
 
 		show-coords -Tq {params.directory}/{params.prefix}.filt.delta | cut -f8,9 | sed '1,3d' | sort | \
-		uniq -c | tr -s ' ' '\\t' | cut -f2-99 | grep -v ^1 | cut -f2,3 > {params.directory}/potential_circularizations.tsv
-		#|| echo 'no circularizations'
+		uniq -c | tr -s ' ' '\\t' | cut -f2-99 | grep -v ^1 | cut -f2,3 > {params.directory}/potential_circularizations.tsv || true
 
-		show-coords -Tql {params.directory}/{params.prefix}.filt.delta | grep -f {params.directory}/potential_circularizations.tsv > {output}
-		#|| echo 'no circularizations'
+		show-coords -Tql {params.directory}/{params.prefix}.filt.delta | grep -f {params.directory}/potential_circularizations.tsv | cat > {output} || true
 		"""
 
 rule circularize_spantig:
@@ -411,18 +416,18 @@ rule circularize_final:
 		rules.assemble_final.output,
 		rules.assemble_final.output[0] + '.fai',
 		dynamic(rules.circularize_overcirc_trim.output),
-		dynamic(rules.circularize_span_trim.output),
+		dynamic(rules.circularize_span_trim.output)
 	output:
-		'{sample}/3.circularization/4.{sample}_circularized.fa',
-		#temp('circs.tmp')
-	params:
-		assembly = lambda wildcards: rules.circularize_assemble.output[0]
+		'{sample}/3.circularization/4.{sample}_circularized.fa'
 	threads: 1
 	shell:
 		"""
-		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1 -d '_' > {output[1]}
-		(cat {input[1]} | grep -vf {output[1]} |
-		cut -f1 | xargs samtools faidx {input[0]}; cat {sample}/3.circularization/3.circular_sequences/*.fa) > {output[0]}
+		cat {sample}/3.circularization/3.circular_sequences/sh/* | bash
+		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1 -d '_' > circs.tmp || true
+		(cat {input[1]} | grep -vf circs.tmp |
+		cut -f1 | xargs samtools faidx {input[0]}; cat {sample}/3.circularization/3.circular_sequences/*.fa) |
+		sed 's/\([ACTG]\)\\n/\1/g' | fold -w 120 > {output}
+		#rm circs.tmp
 		"""
 
 rule final:
