@@ -29,8 +29,6 @@ Snakemake does not have native support for SLURM. Instructions to enable Snakema
 ### Alter config.yaml to provide the following:
  * **sample_name**: Name of sample and output directory
 
- * **fast5_dirs_list**: textual list of absolute paths to run/fast5/* subfolders (which contain .fast5 files)
-
  * **fast5_dirs_list**: text file containing a list of absolute paths to run/fast5/* subfolders containing .fast5 files.  A good way to generate this is with `find -maxdepth 2 -mindepth 2 fast5_parent_dir > fodn.txt`
 
  * **flowcell**: flowcell code, e.g. FLO-MIN106, passed to basecaller
@@ -61,10 +59,33 @@ snakemake --use-singularity --singularity-args '--bind /labs/' -s path/to/metage
 ```
 
 
-### bin_label_and_evaluate
+# bin_label_and_evaluate
 
 Snakemake workflow for aligning, binning, classifying and evaluating a
 metagenomic assembly.
 
-### assembly_comparison_circos
+## Before running this workflow, please do the following:
+
+	source activate mgwf #activate the environment
+	cd <checkm data directory of your choice>
+	wget https://data.ace.uq.edu.au/public/CheckM_databases/checkm_data_2015_01_16.tar.gz #download checkm databases
+	tar -zxf checkm_data_2015_01_16.tar.gz
+	checkm data setRoot #set the location for checkm data and wait for it to initialize
+
+## Inputs
+### Alter config.yaml to provide the following:
+ * **Assembly**: Sequence to bin. Fasta format.
+
+ * **Sample**: names the output directory.
+
+ * **Reads 1, Reads 2**: forward and reverse reads in fastq or fastq.gz format.
+
+ * **Krakendb**: Kraken database with which to classify asssembly contigs.
+
+ * **Read length**: read length.
+
+Known problems: occasionally fails after binning step. Just re-run snakemake.  This is a problem with dynamic job scheduling, and will hopefully be fixed in a future snakemake update.
+
+
+# assembly_comparison_circos
 Snakemake workflow for visualizing assemblies of a particular genome across conditions and time points.  Calls out pre-identified sequences, highlights selected contigs.
