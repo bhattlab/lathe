@@ -9,10 +9,10 @@ Then install snakemake.  This can be done with the following.
 
 ```
 conda install snakemake
-snakemake --version #please ensure this is >=5.4.0
+snakemake --version #please ensure this is >=5.4.3
 ```
 
-Next, clone this github directory to some location where it can be stored permanently.
+Next, clone this github directory to some location where it can be stored permanently.  Remember to keep it updated with `git pull`.
 
 ```
 git clone https://github.com/elimoss/metagenomics_workflows.git
@@ -49,25 +49,16 @@ Snakemake does not have native support for SLURM. Instructions to enable Snakema
 
  * **canu_args**: Extra options for Canu
 
-
-For cluster Canu execution, please note: if set to True, you will need to install Canu in your environment, e.g. `conda install -c conda-forge -c bioconda Canu=1.8` as well as provide any additional required parameters for your job scheduler in the config.yaml file.  When executing on a cluster, Canu will appear to Snakemake to fail, as the first process does not produce an assembly, instead spawning a subsequent job on the cluster.  Don't worry, just re-run Snakemake when the assembly eventually completes.  You may need to add --cleanup-metadata <assembly> before Snakemake will continue.
-
-To execute this workflow, please run the following.  Please note, you must substitute a parent directory containing all of your data and working directories for `/labs/`.  
-
-```
-snakemake --use-singularity --singularity-args '--bind /labs/' -s path/to/metagenomics_workflows/long_read_assembly/Snakefile --configfile path/to/config.yaml --restart-times 0 --keep-going
-```
+ * **skip_circularization**: Should circularization be omitted from the workflow?
 
 
-For cluster Canu execution, please note: if set to True, you will need to install Canu in your environment:
+For cluster Canu execution, please note: if set to True, you will need to install Canu in your environment, e.g. `conda install -c conda-forge -c bioconda Canu=1.8` as well as provide any additional required parameters for your job scheduler in the config.yaml file.  When executing on a cluster, Canu will appear to Snakemake to fail, as the first process does not produce an assembly and instead spawns subsequent jobs on the cluster.  Don't worry, just re-run Snakemake when the assembly completes.
+
+To execute this workflow, please run the following.  Please note, you must substitute a parent directory containing all of your data and working directories for `/labs/`.
 
 ```
-	git clone https://github.com/marbl/canu.git
-	cd canu/src
-	make
-	#put compiled executables on your PATH
-````
-as well as provide any additional required parameters for your job scheduler in the config.yaml file.  When executing on a cluster, Canu will appear to Snakemake to fail, as the first process does not produce an assembly, instead spawning a subsequent job on the cluster.  Don't worry, just re-run Snakemake when the assembly eventually completes.  You may need to add --cleanup-metadata <assembly> before Snakemake will continue.
+snakemake --use-singularity --singularity-args '--bind /labs/' -s path/to/metagenomics_workflows/long_read_assembly/Snakefile --configfile path/to/modified_config.yaml --restart-times 0 --keep-going
+```
 
 
 ### bin_label_and_evaluate
