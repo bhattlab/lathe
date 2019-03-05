@@ -21,11 +21,11 @@ git clone https://github.com/elimoss/metagenomics_workflows.git
 Snakemake does not have native support for SLURM. Instructions to enable Snakemake to schedule cluster jobs with SLURM can be found at https://github.com/bhattlab/slurm
 
 
-# long_read_assembly: Nanopore long read basecalling, assembly and post-processing workflow
+# long_read_assembly
 
-### Note: it is highly recommended to run this workflow on a cluster.  
+Nanopore long read basecalling, assembly and post-processing workflow.  Note: it is highly recommended to run this workflow on a cluster.  
 
-# Inputs
+## Inputs
 ### Alter config.yaml to provide the following:
  * **sample_name**: Name of sample and output directory
 
@@ -64,7 +64,7 @@ snakemake --use-singularity --singularity-args '--bind /labs/' -s path/to/metage
 Snakemake workflow for aligning, binning, classifying and evaluating a
 metagenomic assembly.
 
-## Before running this workflow, please do the following:
+Before running this workflow, please do the following:
 
 	source activate mgwf #activate the environment
 	cd <checkm data directory of your choice>
@@ -80,7 +80,7 @@ metagenomic assembly.
 
  * **Reads 1, Reads 2**: forward and reverse reads in fastq or fastq.gz format.
 
- * **Krakendb**: Kraken database with which to classify asssembly contigs.
+ * **Krakendb**: Kraken2 database with which to classify asssembly contigs.
 
  * **Read length**: read length.
 
