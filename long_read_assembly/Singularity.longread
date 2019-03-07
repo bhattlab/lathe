@@ -23,10 +23,29 @@ from: ubuntu:19.04
     apt-get install -y eatmydata
     eatmydata apt-get install -y wget bzip2 \
       ca-certificates libglib2.0-0 libxext6 libsm6 libxrender1 \
-      git bc rsync
+      git bc rsync zlib1g-dev libbz2-dev liblzma-dev autoconf
     apt-get clean
 
     apt-get install -y build-essential
+
+	#set up bcftools
+	git clone --branch=develop git://github.com/samtools/htslib.git
+	cd htslib
+	autoreconf
+	./configure
+	make
+	make install
+
+	git clone https://github.com/samtools/bcftools.git
+	cd bcftools
+	#check out a commit that comes after the bugfix we need affecting overlapping records in bcftools consensus,
+	#but before reheader was made uncompileable.
+	git checkout 9ee4736a18ac033ee4d30656c5402d8bf6683781
+	autoreconf
+	./configure
+	make
+	make install
+	cd
 
    #set up basecaller
    wget https://mirror.oxfordnanoportal.com/software/analysis/ont-guppy-cpu_2.3.5_linux64.tar.gz

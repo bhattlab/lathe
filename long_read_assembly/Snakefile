@@ -25,8 +25,8 @@ for d in fast5_dirs:
 rule all:
 	input:
 		"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
-		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
-		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
+#		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
+	#	'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
 #Basecalling and assembly
 #########################################################
 
@@ -102,10 +102,34 @@ def choose_pilon_or_medaka():
 	else:
 		return(rules.medaka.output)
 
+def get_racon_input(wildcards):
+	#this method will choose a previous iteration of racon or the original assembly, depending on the value of the iteration wildcard
+	if int(wildcards.iteration) == 1:
+		return(rules.assemble_final.output[0] + '.paf', rules.assemble_final.output[0])
+	else:
+		result = "{sample}/2.polish/racon/{sample}_racon_{iter}.fa".format(sample = wildcards.sample, iter = str(int(wildcards.iteration) - 1))
+		return(result + '.paf', result)
+
+rule racon:
+	input:
+		rules.basecall_final.output,
+		get_racon_input
+	output:
+		'{sample}/2.polish/racon/{sample}_racon_{iteration}.fa'
+	threads: 16
+	singularity: singularity_image
+	resources:
+		mem=48,
+		time=8
+	shell:
+		"""
+		racon -m 8 -x -6 -g -8 -w 500 -t {threads} {input} > {output}
+		"""
+
 rule medaka:
 	input:
 		rules.basecall_final.output,
-		rules.assemble_final.output
+		'{sample}/2.polish/racon/{sample}_racon_4.fa' # request four iterations of racon, as specified by medaka docs
 	output: '{sample}/2.polish/medaka/consensus.fasta'
 	threads: 16
 	resources:
@@ -115,15 +139,12 @@ rule medaka:
 	shell:
 		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.polish/medaka -t {threads} -m r941_flip213;'
 
-		#'export VIRTUAL_ENV_DISABLE_PROMPT=1; source /labs/asbhatt/moss/tools/long_read/medaka-0.3.0/venv/bin/activate; ' ++
-		#'deactivate'
-
 rule align_short_reads:
 	input:
 		rules.assemble_final.output,
 		config['short_reads'].split(',')
-	output: "{sample}/2.polish/medaka/short_reads.bam"
-	threads: 24
+	output: "{sample}/2.polish/pilon/short_reads.bam"
+	threads: 16
 	params:
 		reads = config['short_reads'].split(',')
 	resources:
@@ -131,7 +152,7 @@ rule align_short_reads:
 		time=24
 	singularity: singularity_image
 	shell:
-		"bwa index {input[0]}; bwa mem -t {threads} {input[0]} {params.reads} | samtools sort --threads {threads} > {output}"
+		"bwa index {input[0]}; bwa mem -t {threads} {input} | samtools sort --threads {threads} > {output}"
 
 rule pilon_ranges:
 	input:
@@ -154,8 +175,8 @@ rule pilon_subsetrun:
 	output:
 		'{sample}/2.polish/pilon/sub_runs/{range}/{sample}_{range}.vcf.gz'
 	resources:
-		time=lambda wildcards, attempt: 4 * attempt,
-		mem=lambda wildcards, attempt: 32 * attempt
+		time=4,
+		mem=32
 	singularity: singularity_image
 	params:
 		java_mem = 30,
@@ -192,21 +213,26 @@ rule pilon_subsetrun:
 rule pilon_aggregate_vcf:
 	input:
 		dynamic(rules.pilon_subsetrun.output)
-	output: '{sample}/2.polish/pilon/all_corrections.vcf.gz'
+	output:
+		'{sample}/2.polish/pilon/corrections.vcf.gz'
 	resources:
 		time=4,
 		mem=8
 	singularity: singularity_image
 	shell:
 		"""
-		#get header
-		(bcftools concat --naive {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz | zcat | head -100000 | grep ^# || true
+		#get properly sorted intervals
+		ls {sample}/2.polish/pilon/ranges/ | tr ':-' '\t' | sort -k1,1d -k2,2g | awk '{{print $1,":",$2,"-",$3}}' | tr -d ' ' > sorted_ranges.tmp
 
-		#get corrections
-		bcftools concat --naive {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz | zcat | grep -v ^# | grep -v '0/0' | sort -u -k1,1d -k2,2g | grep -v SVTYPE) |
+		#get header
+		(zcat {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz | head -1000 | grep ^#
+
+		#get corrections within each range (omitting DUP records, which bcftools can't understand)
+		cat sorted_ranges.tmp | xargs -n 1 -I foo sh -c "
+		tabix {sample}/2.polish/pilon/sub_runs/foo/{sample}_foo.vcf.gz foo | grep -v '0/0' | grep -v DUP") |
 
 		#compress and store
-		bgzip > {output}
+		bgzip > {output} || true
 
 		#index
 		tabix -p vcf {output}
@@ -221,15 +247,16 @@ rule pilon_consensus:
 	singularity: singularity_image
 	shell:
 		"""
-		bcftools consensus -f {input} -o {output} && rm -rf {sample}/2.polish/pilon/sub_runs {sample}/2.polish/pilon/ranges
+		bcftools consensus -f {input} -o {output}
 		"""
+			#&& rm -rf {sample}/2.polish/pilon/sub_runs {sample}/2.polish/pilon/ranges
 
 rule polish_final:
 	input: choose_pilon_or_medaka()
 	output: "{sample}/2.polish/{sample}_polished.fa"
 	shell:
 		"""
-		cp {input} {output}
+		cut -f1 -d ':' {input} > {output}
 		"""
 
 #Circularization
