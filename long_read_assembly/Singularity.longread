@@ -42,7 +42,7 @@ from: ubuntu:19.04
 	#but before reheader was made uncompileable.
 	git checkout 9ee4736a18ac033ee4d30656c5402d8bf6683781
 	autoreconf
-	./configure --with-htslib=../htslib
+	./configure --with-htslib=../
 	make
 	make install
 	cd
