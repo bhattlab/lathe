@@ -76,7 +76,7 @@ from: ubuntu:19.04
        bedtools bedops biopython tabix ncurses \
        datrie nanoplot mummer4 racon
 
-   conda install -y -c biobuilds samtools openssl=1.0
+   conda install -y -c bioconda -c biobuilds samtools=1.9 openssl=1.0
 
 
    # tombo for methylation
