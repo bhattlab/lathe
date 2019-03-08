@@ -6,7 +6,7 @@ Eli Moss
 '''
 
 import os
-localrules: pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final
+localrules: pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
 
 sample = config['sample_name']
 fast5_dirs = [l.strip() for l in open(config['fast5_dirs_list'], 'r').readlines()]
@@ -24,9 +24,11 @@ for d in fast5_dirs:
 #BUG: due to a problem with having multiple dynamic wildcards, the second output in rule all must be commented out until after the first has been generated.
 rule all:
 	input:
-		"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
-#		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
+		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample),
+		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
 	#	'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
+			#"{sample}/1.assemble/{sample}_merged_cleaned.fa".format(sample = sample)
+		#	"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
 #Basecalling and assembly
 #########################################################
 
@@ -96,11 +98,20 @@ rule assemble_final:
 #Polishing
 #########################################################
 
-def choose_pilon_or_medaka():
-	if config['short_reads'] != '':
+def choose_polish(wildcards):
+	#skip_polish_or_not(wildcards)
+	if 'skip_polishing' in config and (config['skip_polishing'] == True or config['skip_polishing'] == 'True'):
+		return(rules.assemble_final.output)
+	elif config['short_reads'] != '':
 		return(rules.pilon_consensus.output)
 	else:
 		return(rules.medaka.output)
+
+def choose_pilon_input():
+	if 'polish_both' in config and config['polish_both'] == True:
+		return(rules.medaka.output)
+	else:
+		return(rules.assemble_final.output)
 
 def get_racon_input(wildcards):
 	#this method will choose a previous iteration of racon or the original assembly, depending on the value of the iteration wildcard
@@ -141,7 +152,7 @@ rule medaka:
 
 rule align_short_reads:
 	input:
-		rules.assemble_final.output,
+		choose_pilon_input(),
 		config['short_reads'].split(',')
 	output: "{sample}/2.polish/pilon/short_reads.bam"
 	threads: 16
@@ -156,8 +167,8 @@ rule align_short_reads:
 
 rule pilon_ranges:
 	input:
-		rules.assemble_final.output,
-		rules.assemble_final.output[0] + '.fai'
+		choose_pilon_input(),
+		choose_pilon_input()[0] + '.fai'
 	output: dynamic('{sample}/2.polish/pilon/ranges/{range}')
 	singularity: singularity_image
 	shell:
@@ -168,7 +179,7 @@ rule pilon_ranges:
 
 rule pilon_subsetrun:
 	input:
-		rules.assemble_final.output,
+		choose_pilon_input(),
 		rules.align_short_reads.output,
 		rules.align_short_reads.output[0] + '.bai',
 		'{sample}/2.polish/pilon/ranges/{range}',
@@ -182,7 +193,8 @@ rule pilon_subsetrun:
 		java_mem = 30,
 		bam = "{sample}/2.polish/pilon/sub_runs/{range}/{sample}_{range}.bam",
 		fa = "{sample}/2.polish/pilon/sub_runs/{range}/{sample}_{range}.fa",
-		subrun_folder = "{sample}/2.polish/pilon/sub_runs/{range}"
+		subrun_folder = "{sample}/2.polish/pilon/sub_runs/{range}",
+		target_coverage = 50
 	shell:
 		"""
 		# set env var $i to be the smallest read subset decimal (in increments of 0.1, with a couple very low values thrown in, too)
@@ -192,7 +204,7 @@ rule pilon_subsetrun:
 		for i in 0.01 0.05 $(seq 0.1 0.1 1);
 		do
 		   cov=$(samtools view {input[1]} -s $i -h {wildcards.range} | samtools depth - | cut -f3 | awk '{{sum+=$1}}END{{print sum/(NR+1)}}')
-		   if [ $(echo $cov'>'50|bc) -eq 1 ]
+		   if [ $(echo $cov'>'{params.target_coverage}|bc) -eq 1 ]
 		   then
 		       break
 		   fi
@@ -205,7 +217,7 @@ rule pilon_subsetrun:
 		java -Xmx{params.java_mem}G -jar $(which pilon | sed 's/\/pilon//g')/../share/pilon*/pilon*.jar \
 			--genome {params.fa} \
 			--unpaired {params.bam} --output {sample}_{wildcards.range} --outdir {params.subrun_folder} \
-			--vcf --nostrays
+			--vcf --nostrays --mindepth 3
 		bgzip {params.subrun_folder}/{sample}_{wildcards.range}.vcf
 		tabix -fp vcf {params.subrun_folder}/{sample}_{wildcards.range}.vcf.gz
 		"""
@@ -240,7 +252,7 @@ rule pilon_aggregate_vcf:
 
 rule pilon_consensus:
 	input:
-		rules.assemble_final.output,
+		choose_pilon_input(),
 		rules.pilon_aggregate_vcf.output
 	output:
 		"{sample}/2.polish/pilon/{sample}_pilon.fa"
@@ -252,7 +264,7 @@ rule pilon_consensus:
 			#&& rm -rf {sample}/2.polish/pilon/sub_runs {sample}/2.polish/pilon/ranges
 
 rule polish_final:
-	input: choose_pilon_or_medaka()
+	input: choose_polish
 	output: "{sample}/2.polish/{sample}_polished.fa"
 	shell:
 		"""
@@ -262,7 +274,7 @@ rule polish_final:
 #Circularization
 #########################################################
 
-def skip_circularization_or_not():
+def skip_circularization_or_not(wildcards):
 	if config['skip_circularization'] == 'True' or config['skip_circularization'] == True:
 		return(rules.polish_final.output)
 	else:
@@ -357,7 +369,7 @@ rule circularize_spantig_pre:
 		mem=16
 	shell:
 		"""
-		nucmer -t {threads} -b 5000 {input[0]} {input[1]} -p {params.directory}/{params.prefix}
+		nucmer -b 5000 {input[0]} {input[1]} -p {params.directory}/{params.prefix} #-t {threads} #reverted nucmer back down to 3, no more multithreading :(
 
 		delta-filter -q {params.directory}/{params.prefix}.delta > {params.directory}/{params.prefix}.filt.delta
 
@@ -458,7 +470,7 @@ rule circularize_final:
 		"""
 
 rule final:
-	input: skip_circularization_or_not()
+	input: skip_circularization_or_not
 	output: "{sample}/4.final/{sample}_final.fa"
 	shell: "cp {input} {output}"
 #Utility functions

@@ -7,7 +7,8 @@ kit: 'SQK-LSK109'
 short_reads: '' #Comma-separated forward and reverse optionally gzipped fastq files.  Optional.  If no reads are given, the pilon step is skipped.
 singularity: "shub://elimoss/metagenomics_workflows:longread"
 skip_circularization: False
-
+skip_polishing: False
+polish_both: False #should the input to short read polishing be the output of long read polishing?
 #the below options are all related to Canu
 canu_args: ''
 usegrid: True #should Canu use the grid?
