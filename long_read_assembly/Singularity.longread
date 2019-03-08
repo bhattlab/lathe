@@ -72,7 +72,7 @@ from: ubuntu:19.04
 
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
-       python>3.5 pilon bwa minimap2 bcftools \
+       python>3.5 pilon bwa minimap2 \
        bedtools bedops biopython tabix ncurses \
        datrie nanoplot mummer racon
 
