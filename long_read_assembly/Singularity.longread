@@ -74,7 +74,7 @@ from: ubuntu:19.04
     conda install -y -c conda-forge -c bioconda \
        python>3.5 pilon bwa minimap2 bcftools \
        bedtools bedops biopython tabix ncurses \
-       datrie nanoplot mummer4 racon
+       datrie nanoplot mummer racon
 
    conda install -y -c bioconda -c biobuilds samtools=1.9 openssl=1.0
 
