@@ -76,8 +76,26 @@ rule assemble:
 			opts = config['grid_options']
 		)
 
+rule contig_size_filter:
+	input:
+		rules.assemble.output[0],
+		rules.assemble.output[0] + '.fai'
+	output: '{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.contigs.mincontig_{contig_cutoff}.fasta',
+	shell: "sort -k2,2gr {input[1]} | awk '{{if ($2 > {wildcards.contig_cutoff}) print $1}}' | xargs samtools faidx {input[0]} > {output}"
+
+def choose_contig_cutoff(wildcards):
+	if 'min_contig_size' in config and int(config['min_contig_size'] > 0):
+		return(expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.mincontig_{contig_cutoff}.fasta",
+			g = config['genome_size'].split(","),
+			contig_cutoff = config['min_contig_size']
+			))
+	else:
+		return(expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.fasta",
+			g = config['genome_size'].split(",")
+			))
+
 rule assemble_final:
-	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
+	input: choose_contig_cutoff
 	output: "{sample}/1.assemble/{sample}_raw_assembly.fa"
 	shell:
 		"cp {input[0]} {output}" #request all specified assemblies, but use the first genome size listed in the config
