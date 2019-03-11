@@ -1,8 +1,7 @@
 '''
-Long read assembly and post-processing Snakemake workflow
-for assembling genomes from metagenomes.
+Long read assembly and post-processing workflow for assembling genomes from metagenomes.
 
-Eli Moss
+Author: Eli Moss
 '''
 
 import os
@@ -24,11 +23,10 @@ for d in fast5_dirs:
 #BUG: due to a problem with having multiple dynamic wildcards, the second output in rule all must be commented out until after the first has been generated.
 rule all:
 	input:
-		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample),
-		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
-	#	'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
-			#"{sample}/1.assemble/{sample}_merged_cleaned.fa".format(sample = sample)
 		#	"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
+		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
+		#"{sample}/1.assemble/{sample}_merged_cleaned.fa".format(sample = sample)
+		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample),
 #Basecalling and assembly
 #########################################################
 
@@ -78,21 +76,13 @@ rule assemble:
 			opts = config['grid_options']
 		)
 
-rule merge:
-	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
-	output: "{sample}/1.assemble/{sample}_merged.fasta"
-	resources:
-		time=6,
-		mem=24
-	singularity: singularity_image
-	shell:
-		"merge_wrapper.py {input} -pre {sample}/1.assemble/{sample}_merged; mv merged.fasta {output}"
-
 rule assemble_final:
-	input: rules.merge.output
-	output: '{sample}/1.assemble/{sample}_merged_cleaned.fa' #'{sample}/2.circlator/06.fixstart_cleannames.fasta' # #
+	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
+	output: "{sample}/1.assemble/{sample}_raw_assembly.fa"
 	shell:
-		"cat {input} | cut -f1 -d '_' | fold -w 120 | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}" #sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
+		"cp {input[0]} {output}" #request all specified assemblies, but use the first genome size listed in the config
+
+		#"cat {input} | cut -f1 -d '_' | fold -w 120 | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}" #sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
 		#"cut -f1,9,17 | tr '\\t' '_'
 
 #Polishing
@@ -141,14 +131,17 @@ rule medaka:
 	input:
 		rules.basecall_final.output,
 		'{sample}/2.polish/racon/{sample}_racon_4.fa' # request four iterations of racon, as specified by medaka docs
-	output: '{sample}/2.polish/medaka/consensus.fasta'
+	output: '{sample}/2.polish/medaka/{sample}_medaka.fa'
 	threads: 16
 	resources:
 		mem=32,
 		time=100
 	singularity: singularity_image
 	shell:
-		'medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.polish/medaka -t {threads} -m r941_flip213;'
+		"""
+		medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.polish/medaka -t {threads} -m r941_flip213
+		cut -f1 -d ':' {sample}/2.polish/medaka/consensus.fasta > {output}
+		"""
 
 rule align_short_reads:
 	input:
@@ -241,7 +234,10 @@ rule pilon_aggregate_vcf:
 
 		#get corrections within each range (omitting DUP records, which bcftools can't understand)
 		cat sorted_ranges.tmp | xargs -n 1 -I foo sh -c "
-		tabix {sample}/2.polish/pilon/sub_runs/foo/{sample}_foo.vcf.gz foo | grep -v '0/0' | grep -v DUP") |
+		tabix {sample}/2.polish/pilon/sub_runs/foo/{sample}_foo.vcf.gz foo | grep -v '0/0' | grep -v DUP" |
+
+		#sort by position
+		sort -k1,1d -k2,2g) |
 
 		#compress and store
 		bgzip > {output} || true
@@ -307,7 +303,7 @@ rule extract_bigtigs:
 	output: dynamic("{sample}/3.circularization/1.candidate_genomes/{tig}.fa")
 	singularity: singularity_image
 	params:
-		min_size = 2000000
+		min_size = 1700000
 	shell:
 		"""
 		cat {input[1]} | awk '{{if ($2 > {params.min_size}) print $1}}' | xargs -n 1 -I foo sh -c "
@@ -473,6 +469,7 @@ rule final:
 	input: skip_circularization_or_not
 	output: "{sample}/4.final/{sample}_final.fa"
 	shell: "cp {input} {output}"
+
 #Utility functions
 #########################################################
 

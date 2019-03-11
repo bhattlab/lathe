@@ -1,3 +1,12 @@
+rule merge:
+	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
+	output: "{sample}/1.assemble/{sample}_merged.fasta"
+	resources:
+		time=6,
+		mem=24
+	singularity: singularity_image
+	shell:
+		"merge_wrapper.py {input} -pre {sample}/1.assemble/{sample}_merged; mv merged.fasta {output}"
 
 '''
 rule circlator:
