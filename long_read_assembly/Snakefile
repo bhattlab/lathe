@@ -183,6 +183,7 @@ checkpoint pilon_ranges:
 	singularity: singularity_image
 	shell:
 		"""
+		mkdir {output}
 		bedtools makewindows -w 100000 -g {input[1]} | awk '{{print $1,\":\", $2+ 1, \"-\", $3}}'  | tr -d ' ' |
 		xargs -n 1 -I foo touch {sample}/2.polish/pilon/ranges/foo
 		"""
