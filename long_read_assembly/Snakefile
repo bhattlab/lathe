@@ -19,14 +19,13 @@ for d in fast5_dirs:
 	fast5_abspath_run_subfolder[run_subfolder] = d
 	fast5_run_subfolder_abspath[d] = run_subfolder
 
-
-#BUG: due to a problem with having multiple dynamic wildcards, the second output in rule all must be commented out until after the first has been generated.
 rule all:
 	input:
-		#	"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
+		#"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
 		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
-		#"{sample}/1.assemble/{sample}_merged_cleaned.fa".format(sample = sample)
 		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample),
+
+
 #Basecalling and assembly
 #########################################################
 
@@ -176,11 +175,11 @@ rule align_short_reads:
 	shell:
 		"bwa index {input[0]}; bwa mem -t {threads} {input} | samtools sort --threads {threads} > {output}"
 
-rule pilon_ranges:
+checkpoint pilon_ranges:
 	input:
 		choose_pilon_input(),
 		choose_pilon_input()[0] + '.fai'
-	output: dynamic('{sample}/2.polish/pilon/ranges/{range}')
+	output: directory('{sample}/2.polish/pilon/ranges')
 	singularity: singularity_image
 	shell:
 		"""
@@ -233,9 +232,16 @@ rule pilon_subsetrun:
 		tabix -fp vcf {params.subrun_folder}/{sample}_{wildcards.range}.vcf.gz
 		"""
 
+def aggregate_pilon_subsetruns(wildcards):
+	checkpoint_output = checkpoints.pilon_ranges.get(**wildcards).output[0]
+	result = expand(rules.pilon_subsetrun.output,
+		sample=wildcards.sample,
+		range=glob_wildcards(os.path.join(checkpoint_output, '{range}')).range)
+	return(result)
+
 rule pilon_aggregate_vcf:
 	input:
-		dynamic(rules.pilon_subsetrun.output)
+		aggregate_pilon_subsetruns
 	output:
 		'{sample}/2.polish/pilon/corrections.vcf.gz'
 	resources:
@@ -314,11 +320,11 @@ rule circularize_mapreads:
 		samtools index {output[0]}
 		"""
 
-rule extract_bigtigs:
+checkpoint extract_bigtigs:
 	input:
 		rules.polish_final.output,
 		rules.polish_final.output[0] + ".fai",
-	output: dynamic("{sample}/3.circularization/1.candidate_genomes/{tig}.fa")
+	output: directory("{sample}/3.circularization/1.candidate_genomes/")
 	singularity: singularity_image
 	params:
 		min_size = 1700000
@@ -332,7 +338,7 @@ rule extract_bigtigs:
 rule circularize_bam2reads:
 	input:
 		rules.circularize_mapreads.output,
-		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa" #rules.extract_bigtigs.output
+		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa"
 	output:
 		"{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}_terminal_reads.fq.gz"
 	singularity: singularity_image
@@ -430,6 +436,13 @@ rule circularize_span_trim:
 
 		open(output[0], 'w').write(cmd + '\n')
 
+def aggregate_span_trim(wildcards):
+	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output
+	result = expand(rules.aggregate_span_trim.output,
+		sample=wildcards.sample,
+		tig=glob_wildcards(os.path.join(checkpoint_output, '{tig}.fa')).tig)
+	return(result)
+
 rule circularize_overcirc:
 	input:
 		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa"
@@ -464,12 +477,19 @@ rule circularize_overcirc_trim:
 
 		open(output[0], 'w').write(cmd + '\n')
 
+def aggregate_overcirc_trim(wildcards):
+	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output
+	result = expand(rules.circularize_overcirc_trim.output,
+		sample=wildcards.sample,
+		tig=glob_wildcards(os.path.join(checkpoint_output, '{tig}.fa')).tig)
+	return(result)
+
 rule circularize_final:
 	input:
 		rules.assemble_final.output,
 		rules.assemble_final.output[0] + '.fai',
-		dynamic(rules.circularize_overcirc_trim.output),
-		dynamic(rules.circularize_span_trim.output)
+		aggregate_overcirc_trim,
+		aggregate_span_trim
 	output:
 		'{sample}/3.circularization/4.{sample}_circularized.fa'
 	threads: 1
