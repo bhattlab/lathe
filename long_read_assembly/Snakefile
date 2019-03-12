@@ -331,6 +331,7 @@ checkpoint extract_bigtigs:
 		min_size = 1700000
 	shell:
 		"""
+		mkdir {output}
 		cat {input[1]} | awk '{{if ($2 > {params.min_size}) print $1}}' | xargs -n 1 -I foo sh -c "
 			samtools faidx {input[0]} foo > {sample}/3.circularization/1.candidate_genomes/foo.fa
 		"
