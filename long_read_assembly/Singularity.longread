@@ -16,7 +16,7 @@ from: ubuntu:19.04
 
 # this command assumes at least singularity 2.3
 %environment
-    PATH="/usr/local/anaconda/bin:$PATH" 
+    PATH="/usr/local/anaconda/bin:$PATH"
 		PATH="/ont-guppy-cpu/bin/:$PATH"
 %post
     apt-get update
@@ -50,6 +50,7 @@ from: ubuntu:19.04
    #set up basecaller
    wget https://mirror.oxfordnanoportal.com/software/analysis/ont-guppy-cpu_2.3.5_linux64.tar.gz
 	 tar -zxf ont-guppy-cpu*.tar.gz
+	 mv ont-guppy-cpu /
 
 
 	 #set up canu
@@ -79,6 +80,8 @@ from: ubuntu:19.04
    conda install -y -c bioconda -c biobuilds samtools=1.9 openssl=1.0
 
 
+	 conda remove bcftools
+	 
    # tombo for methylation
    # conda create -c bioconda -n tombo ont-tombo
    # source activate tombo
