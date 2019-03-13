@@ -331,7 +331,7 @@ checkpoint extract_bigtigs:
 		min_size = 1700000
 	shell:
 		"""
-		mkdir {output}
+		#mkdir {output}
 		cat {input[1]} | awk '{{if ($2 > {params.min_size}) print $1}}' | xargs -n 1 -I foo sh -c "
 			samtools faidx {input[0]} foo > {sample}/3.circularization/1.candidate_genomes/foo.fa
 		"
@@ -412,8 +412,8 @@ rule circularize_spantig:
 rule circularize_span_trim:
 	input:
 		rules.circularize_spantig.output,
-		rules.extract_bigtigs.output,
-		rules.extract_bigtigs.output[0] + '.fai',
+		rules.extract_bigtigs.output[0] + '/{tig}.fa',
+		rules.extract_bigtigs.output[0] + '/{tig}.fa.fai',
 		rules.circularize_assemble.output,
 		rules.circularize_assemble.output[0] + '.fai'
 	output:
@@ -439,8 +439,8 @@ rule circularize_span_trim:
 		open(output[0], 'w').write(cmd + '\n')
 
 def aggregate_span_trim(wildcards):
-	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output
-	result = expand(rules.aggregate_span_trim.output,
+	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output[0]
+	result = expand(rules.circularize_span_trim.output, #"{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_trim.sh",
 		sample=wildcards.sample,
 		tig=glob_wildcards(os.path.join(checkpoint_output, '{tig}.fa')).tig)
 	return(result)
@@ -459,8 +459,8 @@ rule circularize_overcirc:
 rule circularize_overcirc_trim:
 	input:
 		rules.circularize_overcirc.output,
-		rules.extract_bigtigs.output,
-		rules.extract_bigtigs.output[0] + '.fai',
+		rules.extract_bigtigs.output[0] + "/{tig}.fa",
+		rules.extract_bigtigs.output[0] + '/{tig}.fa.fai',
 		rules.circularize_assemble.output,
 		rules.circularize_assemble.output[0] + '.fai'
 	output:
@@ -480,8 +480,8 @@ rule circularize_overcirc_trim:
 		open(output[0], 'w').write(cmd + '\n')
 
 def aggregate_overcirc_trim(wildcards):
-	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output
-	result = expand(rules.circularize_overcirc_trim.output,
+	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output[0]
+	result = expand(rules.circularize_overcirc_trim.output, #"{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_overcirc.sh",
 		sample=wildcards.sample,
 		tig=glob_wildcards(os.path.join(checkpoint_output, '{tig}.fa')).tig)
 	return(result)
