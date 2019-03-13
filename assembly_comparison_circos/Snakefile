@@ -8,7 +8,7 @@ localrules: faidx, stage_assemblies, assembly_alignment_filter, bwa_index, highl
 condtp_asm = {}
 
 with open(config['assemblies']) as asmf:
-	basedir = os.path.dirname(config['assemblies'])
+	basedir = '.' #os.path.dirname(config['assemblies'])
 	for l in asmf.readlines():
 		s = l.split("\t")
 		if len(s) == 1:
@@ -33,8 +33,6 @@ rule targets:
 		config['assemblies']
 
 rule faidx:
-	conda:
-		"envs/mgwf.yaml"
 	input:
 		config['reference']
 	output:
@@ -52,12 +50,10 @@ rule stage_assemblies:
 	output:
 		"assemblies/{f}.fa"
 	shell:
-		"ln -s {input} {output}"
+		"cp {input} {output}"
 
 #Assembly alignments to reference
 rule assembly_alignment:
-	conda:
-		"envs/mgwf.yaml"
 	input:
 		config['reference'],
 		rules.stage_assemblies.output
@@ -69,20 +65,16 @@ rule assembly_alignment:
 			"show-coords aligned/{wildcards.f}.delta.filt -T > aligned/{wildcards.f}.coords; "
 
 rule assembly_alignment_filter:
-	conda:
-		"envs/mgwf.yaml"
 	input:
 		rules.assembly_alignment.output
 	output:
 		"aligned/{f}.bed"
 	params:
-		gap_width = "1000",
+		gap_width = "25000",
 	script:
 		"scripts/coord_filter.py"
 
 rule bwa_index:
-	conda:
-		"envs/mgwf.yaml"
 	input:
 		config['reference']
 	output:
@@ -97,13 +89,11 @@ rule bwa_index:
 		time=1
 	threads: 1
 	shell:
-		"ln -s {input} bwa_idx/ref.fa; bwa index bwa_idx/ref.fa"
+		"cp {input} bwa_idx/ref.fa; bwa index bwa_idx/ref.fa"
 
 
 #16S (highlight sequence) alignments
 rule highlight_alignments:
-	conda:
-		"envs/mgwf.yaml"
 	input:
 		"bwa_idx/ref.fa",
 		config['highlight_sequences']
@@ -113,11 +103,9 @@ rule highlight_alignments:
 		"bwa mem {input} -a > highlighted/highlights.sam;" +
 		"samtools view highlighted/highlights.sam -F4 | cut -f1,3,4 | \
 		sort -u -k1,1 | awk '{{print $2, $3, $3 + 1000, $1}}' > {output}" #| cut -f1,3,4 #|awk '{{print $2, $3, $3 + 1000, $1}}' > {output}"
-		##grep NM:i:0 | 
+		##grep NM:i:0 |
 
 rule circos:
-	conda:
-		"envs/mgwf.yaml"
 	input:
 		rules.faidx.output,
 		config['dark_contigs'],
