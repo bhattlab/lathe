@@ -453,7 +453,7 @@ rule circularize_overcirc:
 		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa"
 	output: "{sample}/3.circularization/2.circularization/overcircularized/overcirc_{tig}.txt"
 	params:
-		delta = '{sample}/3.circularization/2.circularization/overcircularized/{tig}.delta'
+		delta = '{sample}/3.circularization/2.circularization/overcircularized/{tig}'
 	threads: 8
 	singularity: singularity_image
 	script:
@@ -498,6 +498,7 @@ rule circularize_final:
 	output:
 		'{sample}/3.circularization/4.{sample}_circularized.fa'
 	threads: 1
+	singularity: singularity_image
 	shell:
 		"""
 		cat {sample}/3.circularization/3.circular_sequences/sh/* | bash
