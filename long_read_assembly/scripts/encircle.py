@@ -15,8 +15,8 @@ min_smoothed_aln_len = 10000
 min_aln_len = 5000
 
 #align
-print("Aligning with {t} threads...".format(t=str(snakemake.threads)))
-os.system("nucmer --delta {delta} -b 4000 -l 2000 --maxmatch -t {threads} {fa} {fa}".format(
+print("Aligning...".format(t=str(snakemake.threads)))
+os.system("nucmer -p {delta} -b 4000 -l 2000 --maxmatch {fa} {fa}".format( #-t {threads} back to mummer3, no more multithreading : (
 	threads = str(snakemake.threads),
 	delta = snakemake.params['delta'],
 	fa = fastaf
