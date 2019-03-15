@@ -280,12 +280,12 @@ rule label_bins:
 
 rule postprocess_raw:
 	input:
-#		dynamic(rules.prokka.output),
-	#	dynamic(rules.quast.output),
+		dynamic(rules.prokka.output),
+		dynamic(rules.quast.output),
 		rules.checkm.output,
-		#dynamic(rules.aragorn.output),
-		#dynamic(rules.barrnap.output),
-		#dynamic(rules.bin_coverage.output),
+		dynamic(rules.aragorn.output),
+		dynamic(rules.barrnap.output),
+		dynamic(rules.bin_coverage.output),
 		rules.label_bins.output
 	output:
 		"{samp}/final/prokka.tmp",
