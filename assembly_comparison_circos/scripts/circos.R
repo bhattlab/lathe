@@ -47,7 +47,7 @@ contig.alpha = 0.3
 highlight_offset = 1.2
 
 color1 = "#241E1E"
-color2 = "#557BB8"
+color2 = snakemake@params[[1]] #"#557BB8"
 color3 = "#5AC6E2"
 
 bed1.color = adjustcolor(color1, alpha = contig.alpha)

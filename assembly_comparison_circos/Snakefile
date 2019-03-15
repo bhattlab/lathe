@@ -112,6 +112,8 @@ rule circos:
 		rules.highlight_alignments.output,
 		config['highlight_intensities'],
 		expand("aligned/{f}.bed", f = aligned_filenames)
+	params:
+		outer_track_col = config['outer_track_color']
 	output:
 		"circos/circos.pdf"
 	script:
