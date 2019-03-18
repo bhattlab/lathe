@@ -52,3 +52,5 @@ from: ubuntu:19.04
          rm ~/anaconda.sh
     fi
 		export PATH="/usr/local/anaconda/bin:$PATH"
+
+		conda install -c bioconda mummer
