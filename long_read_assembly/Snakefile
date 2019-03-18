@@ -5,6 +5,8 @@ Author: Eli Moss
 '''
 
 import os
+import glob
+
 localrules: pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
 
 sample = config['sample_name']
@@ -24,7 +26,6 @@ rule all:
 		#"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
 		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
 		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample),
-
 
 #Basecalling and assembly
 #########################################################
@@ -53,7 +54,7 @@ rule nanoplot:
 	resources:
 		time=4
 	threads: 12
-	singularity: singularity_image
+	singularity: "docker://quay.io/biocontainers/nanoplot:1.20.0--py35_0"
 	shell: "NanoPlot --fastq {input} -t {threads} --color green  -o " + "{s}/0.basecall/nanoplots".format(s = sample)
 
 rule assemble:
@@ -75,11 +76,21 @@ rule assemble:
 			opts = config['grid_options']
 		)
 
+rule merge:
+	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
+	output: "{sample}/1.assemble/{sample}_merged.fasta"
+	resources:
+		time=6,
+		mem=24
+	singularity: singularity_image
+	shell:
+		"merge_wrapper.py {input} -pre {sample}/1.assemble/{sample}_merged -lm 40000 -c 5 -hco 10; mv merged.fasta {output}"
+
 rule contig_size_filter:
 	input:
-		rules.assemble.output[0],
-		rules.assemble.output[0] + '.fai'
-	output: '{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.contigs.mincontig_{contig_cutoff}.fasta',
+		rules.merge.output[0],
+		rules.merge.output[0] + '.fai'
+	output: '{sample}/1.assemble/{sample}_merged_mincontig_{contig_cutoff}.fasta',
 	shell: "sort -k2,2gr {input[1]} | awk '{{if ($2 > {wildcards.contig_cutoff}) print $1}}' | xargs samtools faidx {input[0]} > {output}"
 
 def choose_contig_cutoff(wildcards):
@@ -89,16 +100,16 @@ def choose_contig_cutoff(wildcards):
 			contig_cutoff = config['min_contig_size']
 			))
 	else:
-		return(expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.fasta",
-			g = config['genome_size'].split(",")
-			))
+		return(rules.merge.output)
 
 rule assemble_final:
 	input: choose_contig_cutoff
 	output: "{sample}/1.assemble/{sample}_raw_assembly.fa"
 	shell:
-		"cp {input[0]} {output}" #request all specified assemblies, but use the first genome size listed in the config
+		"cat {input} | cut -f1 -d '_' | fold -w 120 | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}"
 
+
+		#"cp {input[0]} {output}" #request all specified assemblies, but use the first genome size listed in the config
 		#"cat {input} | cut -f1 -d '_' | fold -w 120 | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}" #sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
 		#"cut -f1,9,17 | tr '\\t' '_'
 
@@ -360,7 +371,7 @@ rule circularize_assemble:
 	output: "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}.contigs.fasta"
 	params:
 		directory="{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}",
-	singularity: singularity_image if config['usegrid'] != 'True' and config['usegrid'] != True else '' #switch between image and local environment for canu depending on whether cluster execution is required
+	singularity: singularity_image
 	resources:
 		time=12,
 		mem=50

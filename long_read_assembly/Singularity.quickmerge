@@ -1,0 +1,42 @@
+# Metagenomics Singularity environment definition for long read workflow
+# Eli Moss
+# elimoss@stanford.edu
+# January 2019
+
+# build this environment with `sudo singularity build bhatt_meta_singularity.img bhatt_meta_singularity.def`
+# for development, build with sudo singularity build --sandbox bhatt_meta_singularity bhatt_meta_singularity.def,
+# and then modify with sudo singularity shell --writable bhatt_meta_singularity/
+# When complete, use sudo singularity build bhatt_meta.simg bhatt_meta_singularity/
+
+# This environment is used in practice by adding --with-singularity shub://elimoss/metagenomics_workflows:longread
+# to the snakemake command.
+
+bootstrap: docker
+from: ubuntu:19.04
+
+# this command assumes at least singularity 2.3
+%environment
+    PATH="/usr/local/anaconda/bin:$PATH"
+		PATH="/usr/bin/quickmerge/:$PATH"
+%post
+    apt-get update
+    apt-get install -y eatmydata
+    eatmydata apt-get install -y wget bzip2 \
+      ca-certificates libglib2.0-0 libxext6 libsm6 libxrender1 \
+      git bc rsync zlib1g-dev libbz2-dev liblzma-dev autoconf
+    apt-get clean
+
+    apt-get install -y build-essential
+
+   #install quickmerge	
+   wget https://github.com/mahulchak/quickmerge/archive/v0.2.tar.gz
+   tar -zxf v0.2.tar.gz
+	 mv quickmerge-0.2/ quickmerge
+	 cd quickmerge/
+   bash make_merger.sh
+	 ln -s merger/quickmerge
+	 (echo '#!/usr/bin/env python'; sed '1d' merge_wrapper.py ) > tmp
+	 mv tmp merge_wrapper.py
+	 chmod a+x merge_wrapper.py
+	 cd ..
+	 mv quickmerge /usr/bin/
