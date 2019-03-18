@@ -18,6 +18,7 @@ from: ubuntu:19.04
 %environment
     PATH="/usr/local/anaconda/bin:$PATH"
 		PATH="/usr/bin/quickmerge/:$PATH"
+		PATH="/usr/local/anaconda/bin:$PATH"
 %post
     apt-get update
     apt-get install -y eatmydata
@@ -28,7 +29,7 @@ from: ubuntu:19.04
 
     apt-get install -y build-essential
 
-   #install quickmerge	
+   #install quickmerge
    wget https://github.com/mahulchak/quickmerge/archive/v0.2.tar.gz
    tar -zxf v0.2.tar.gz
 	 mv quickmerge-0.2/ quickmerge
@@ -40,3 +41,14 @@ from: ubuntu:19.04
 	 chmod a+x merge_wrapper.py
 	 cd ..
 	 mv quickmerge /usr/bin/
+
+
+
+    # install anaconda
+    if [ ! -d /usr/local/anaconda ]; then
+         wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh \
+            -O ~/anaconda.sh && \
+         bash ~/anaconda.sh -b -p /usr/local/anaconda && \
+         rm ~/anaconda.sh
+    fi
+		export PATH="/usr/local/anaconda/bin:$PATH"
