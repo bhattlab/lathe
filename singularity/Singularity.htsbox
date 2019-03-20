@@ -1,0 +1,26 @@
+# Metagenomics Singularity environment definition for htsbox repository
+# Eli Moss
+# elimoss@stanford.edu
+# January 2019
+
+# This environment is used in practice by adding --with-singularity shub://elimoss/metagenomics_workflows:longread
+# to the snakemake command.
+
+bootstrap: docker
+from: ubuntu:19.04
+
+# this command assumes at least singularity 2.3
+%environment
+%post
+    apt-get update
+    apt-get install -y eatmydata
+    eatmydata apt-get install -y \
+    git ca-certificates zlib1g-dev libbz2-dev liblzma-dev
+    apt-get clean
+
+    apt-get install -y build-essential
+
+		git clone https://github.com/lh3/htsbox.git
+		cd htsbox
+		make
+		cp htsbox /usr/bin/
