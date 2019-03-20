@@ -1,5 +1,0 @@
-samplename: "em-prevotella"
-reads1: "4.sync/GCCAAT_1.fq.gz"
-reads2: "4.sync/GCCAAT_2.fq.gz"
-insertion_fasta: "identify_is/high_coverage_contig_method/allseqs.fa"
-assembly_fasta: "bin.4.fa"

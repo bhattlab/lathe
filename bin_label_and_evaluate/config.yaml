@@ -1,7 +1,0 @@
-assembly: contigs.fasta
-sample: samplename
-reads1: reads_1.fq.gz
-reads2: reads_2.fq.gz #omit for single-ended or long reads
-krakendb: /labs/asbhatt/data/program_indices/kraken2/kraken_custom_jan2019/genbank_custom
-read_length: 150 #mean read length
-long_read: False
