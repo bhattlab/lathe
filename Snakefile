@@ -26,6 +26,7 @@ rule all:
 		#"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
 		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
 		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample),
+		"{sample}/4.final/anomalous_sites.tsv".format(sample = sample)
 
 #Basecalling and assembly
 #########################################################
@@ -82,7 +83,7 @@ rule merge:
 	resources:
 		time=6,
 		mem=24
-	singularity: singularity_image
+	singularity: "shub://elimoss/metagenomics_workflows:quickmerge"
 	shell:
 		"merge_wrapper.py {input} -pre {sample}/1.assemble/{sample}_merged -lm 40000 -c 5 -hco 10; mv merged.fasta {output}"
 
@@ -502,8 +503,8 @@ def aggregate_overcirc_trim(wildcards):
 
 rule circularize_final:
 	input:
-		rules.assemble_final.output,
-		rules.assemble_final.output[0] + '.fai',
+		rules.polish_final.output,
+		rules.polish_final.output[0] + '.fai',
 		aggregate_overcirc_trim,
 		aggregate_span_trim
 	output:
@@ -523,7 +524,30 @@ rule circularize_final:
 rule final:
 	input: skip_circularization_or_not
 	output: "{sample}/4.final/{sample}_final.fa"
-	shell: "cp {input} {output}"
+	shell: "cut -f1 -d ':' {input} {output}"
+
+#Coverage anomaly identification
+#########################################################
+
+rule identify_anomalies:
+        input:
+                rules.final.output[0] + '.bam',
+                rules.final.output[0] + '.fai',
+				rules.final.output[0] + '.bam.bai'
+        output:
+                "{sample}/4.final/coverage_shoulders.tsv", #temp
+                "{sample}/4.final/anomalous_sites.tsv"
+        #singularity: singularity_image
+        shell:
+                """
+                cut -f1 {input[1]} | xargs -n 1 -I foo -P 100 sh -c "
+                        samtools depth {input[0]} | \
+                        awk 'BEGIN{{size=3}} {{mod=NR%size; if(NR<=size){{count++}}else{{sum-=array[mod]}};sum+=\$3;array[mod]=\$3;print \$0, sum/count}}' | tr ' ' '\\t' | \
+                        awk '\$4 > 0 && f > 0 && (\$4 > 10 * f || \$4 < f / 10) {{print a}} {{f=\$4; a=\$0}}'
+                " > {output[0]}
+
+                paste <(cat {output[0]}) <(cut -f1 {output[0]} | xargs -n 1 -I foo grep foo {input[1]}) | awk '{{if ($2 > 100 && $6 - $2 > 100) print $1,$2,$3}}' > {output[1]}
+                """
 
 #Utility functions
 #########################################################
