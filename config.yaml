@@ -20,4 +20,4 @@ grid_options: '--time=80:00:00 --account asbhatt'
 genome_size: '50m,100m'
 
 #do not change
-singularity: "shub://elimoss/metagenomics_workflows:longread"
+singularity: "shub://elimoss/lathe:longread"
