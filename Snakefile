@@ -82,7 +82,7 @@ rule merge:
 	resources:
 		time=6,
 		mem=24
-	singularity: "shub://elimoss/metagenomics_workflows:quickmerge"
+	singularity: "shub://elimoss/lathe:quickmerge"
 	shell:
 		"merge_wrapper.py {input} -pre {sample}/1.assemble/{sample}_merged -lm 40000 -c 5 -hco 10; mv merged.fasta {output}"
 
@@ -527,11 +527,16 @@ rule misassemblies_detect:
 	input:
 		skip_circularization_or_not(),
 		skip_circularization_or_not()[0] + '.fai',
-		skip_circularization_or_not()[0] + '.bam'
+		skip_circularization_or_not()[0] + '.bam',
+		skip_circularization_or_not()[0] + '.bam.bai'
 	output: "{sample}/4.break_misassemblies/misassemblies.tsv"
 	params:
 		window_width = 2000,
 		min_tig_size = 50000
+	resources:
+		mem=24,
+		time=6
+	singularity: "shub://elimoss/lathe:htsbox"
 	shell:
 		"""
 	    bedtools makewindows -g {input[1]} -w {params.window_width} | join - {input[1]} | tr ' ' '\t' | \
