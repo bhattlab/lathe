@@ -24,9 +24,8 @@ for d in fast5_dirs:
 rule all:
 	input:
 		#"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
-		"{sample}/4.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
-		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample),
-		"{sample}/4.final/anomalous_sites.tsv".format(sample = sample)
+		"{sample}/5.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
+		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
 
 #Basecalling and assembly
 #########################################################
@@ -310,12 +309,6 @@ rule polish_final:
 #Circularization
 #########################################################
 
-def skip_circularization_or_not(wildcards):
-	if config['skip_circularization'] == 'True' or config['skip_circularization'] == True:
-		return(rules.polish_final.output)
-	else:
-		return(rules.circularize_final.output)
-
 rule circularize_mapreads:
 	input:
 		rules.polish_final.output,
@@ -517,37 +510,62 @@ rule circularize_final:
 		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1 -d '_' > circs.tmp || true
 		(cat {input[1]} | grep -vf circs.tmp |
 		cut -f1 | xargs samtools faidx {input[0]}; cat {sample}/3.circularization/3.circular_sequences/*.fa) |
-		sed 's/\([ACTG]\)\\n/\1/g' | fold -w 120 > {output}
+		sed 's/\([ACTG]\)\\n/\1/g' | fold -w 120 | cut -f1 -d ':' > {output}
 		#rm circs.tmp
 		"""
 
-rule final:
-	input: skip_circularization_or_not
-	output: "{sample}/4.final/{sample}_final.fa"
-	shell: "cut -f1 -d ':' {input} {output}"
-
-#Coverage anomaly identification
+#Misassembly detection
 #########################################################
 
-rule identify_anomalies:
-        input:
-                rules.final.output[0] + '.bam',
-                rules.final.output[0] + '.fai',
-				rules.final.output[0] + '.bam.bai'
-        output:
-                "{sample}/4.final/coverage_shoulders.tsv", #temp
-                "{sample}/4.final/anomalous_sites.tsv"
-        #singularity: singularity_image
-        shell:
-                """
-                cut -f1 {input[1]} | xargs -n 1 -I foo -P 100 sh -c "
-                        samtools depth {input[0]} | \
-                        awk 'BEGIN{{size=3}} {{mod=NR%size; if(NR<=size){{count++}}else{{sum-=array[mod]}};sum+=\$3;array[mod]=\$3;print \$0, sum/count}}' | tr ' ' '\\t' | \
-                        awk '\$4 > 0 && f > 0 && (\$4 > 10 * f || \$4 < f / 10) {{print a}} {{f=\$4; a=\$0}}'
-                " > {output[0]}
+def skip_circularization_or_not():
+	if config['skip_circularization'] == 'True' or config['skip_circularization'] == True:
+		return(rules.polish_final.output)
+	else:
+		return(rules.circularize_final.output)
 
-                paste <(cat {output[0]}) <(cut -f1 {output[0]} | xargs -n 1 -I foo grep foo {input[1]}) | awk '{{if ($2 > 100 && $6 - $2 > 100) print $1,$2,$3}}' > {output[1]}
-                """
+rule misassemblies_detect:
+	input:
+		skip_circularization_or_not(),
+		skip_circularization_or_not()[0] + '.fai',
+		skip_circularization_or_not()[0] + '.bam'
+	output: "{sample}/4.break_misassemblies/misassemblies.tsv"
+	params:
+		window_width = 2000,
+		min_tig_size = 50000
+	shell:
+		"""
+	    bedtools makewindows -g {input[1]} -w {params.window_width} | join - {input[1]} | tr ' ' '\t' | \
+	    cut -f1-4 | awk '{{if ($2 > {params.window_width} && $3 < $4 - {params.window_width} && $4 > {params.min_tig_size}) print $0}}' | \
+	    xargs -P 16 -l bash -c '
+	     htsbox samview {input[2]} $0:$1-$1 -p | \
+	     cut -f8,9 | awk "{{if (\$1 < $1 - ({params.window_width}/2) && \$2 > $1 + ({params.window_width}/2)) print \$0}}" | wc -l | \
+	     paste <(echo $0) <(echo $1) - ' | awk '{{if ($3 < 2) print $0}}
+	    ' > {output}
+		"""
+
+rule misassemblies_final:
+	input:
+		rules.misassemblies_detect.output,
+		skip_circularization_or_not()[0] + ".fai",
+		skip_circularization_or_not()
+	output:
+		"{sample}/4.break_misassemblies/{sample}_corrected.fa"
+	shell:
+		"""
+		cat {input[0]} | grep -v ^# | sort -k1,1g | join - <(sort -k1,1g {input[1]}) | xargs -l bash -c "
+			(echo samtools faidx {input[2]} \$0:1-\$1;
+			echo samtools faidx {input[2]} \$0:\$1-\$3;)
+		" | bash | cut -f1 -d ':' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output[0]}
+
+		cut -f1 {input[0]} > {sample}.tigs.toremove
+		grep -vf {sample}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
+		rm {sample}.tigs.toremove
+		"""
+
+rule final:
+	input: rules.misassemblies_final.output
+	output: "{sample}/5.final/{sample}_final.fa"
+	shell: "cp {input} {output}"
 
 #Utility functions
 #########################################################
