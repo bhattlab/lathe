@@ -76,8 +76,66 @@ rule assemble:
 			opts = config['grid_options']
 		)
 
+
+rule misassemblies_detect_subasm:
+	input:
+		rules.assemble.output[0],
+		rules.assemble.output[0] + '.fai',
+		rules.assemble.output[0] + '.bam',
+		rules.assemble.output[0] + '.bam.bai'
+	output: "{sample}/1.assemble/assemble_{genome_size}/misassemblies/misassemblies.tsv"
+	params:
+		window_width = 2000,
+		min_tig_size = 50000
+	resources:
+		mem=24,
+		time=6
+	singularity: "shub://elimoss/lathe:htsbox"
+	shell:
+		"""
+	    bedtools makewindows -g {input[1]} -w {params.window_width} | join - {input[1]} | tr ' ' '\t' | \
+	    cut -f1-4 | awk '{{if ($2 > {params.window_width} && $3 < $4 - {params.window_width} && $4 > {params.min_tig_size}) print $0}}' | \
+	    xargs -P 16 -l bash -c '
+	     htsbox samview {input[2]} $0:$1-$1 -p | \
+	     cut -f8,9 | awk "{{if (\$1 < $1 - ({params.window_width}/2) && \$2 > $1 + ({params.window_width}/2)) print \$0}}" | wc -l | \
+	     paste <(echo $0) <(echo $1) - ' | awk '{{if ($3 < 2) print $0}}
+	    ' > {output}
+		"""
+
+rule misassemblies_final_subasm:
+	input:
+		rules.misassemblies_detect_subasm.output,
+		rules.assemble.output[0] + ".fai",
+		rules.assemble.output[0]
+	output:
+		'{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.contigs.corrected.fasta'
+	shell:
+		"""
+		cat {input[0]} | grep -v ^# | sort -k1,1g | join - <(sort -k1,1g {input[1]}) | sort -k1,1d -k2,2g | \
+		awk '{{
+		if ($1 == prev_tig){{
+		 print($1,prev_coord,$2)
+		 }}
+		else{{
+			if (prev_len > 0){{
+				print(prev_tig,prev_coord,prev_len)
+			}}
+			print($1,"1",$2)
+			}}
+		prev_tig = $1
+		prev_coord = $2
+		prev_len = $4
+		}}
+		END {{ print(prev_tig,prev_coord,prev_len) }}' | sed "s/\(.*\) \(.*\)\ \(.*\)/\\1:\\2-\\3/g" |  xargs samtools faidx {input[2]} \
+		| cut -f1 -d ':' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output[0]}
+
+		cut -f1 {input[0]} > {sample}_{wildcards.genome_size}.tigs.toremove
+		grep -vf {sample}_{wildcards.genome_size}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
+		rm {sample}_{wildcards.genome_size}.tigs.toremove
+		"""
+
 rule merge:
-	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.fasta", g = config['genome_size'].split(","))
+	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.corrected.fasta", g = config['genome_size'].split(","))
 	output: "{sample}/1.assemble/{sample}_merged.fasta"
 	resources:
 		time=6,
