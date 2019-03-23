@@ -77,13 +77,13 @@ rule assemble:
 		)
 
 
-rule misassemblies_detect_subasm:
+rule misassemblies_detect:
 	input:
-		rules.assemble.output[0],
-		rules.assemble.output[0] + '.fai',
-		rules.assemble.output[0] + '.bam',
-		rules.assemble.output[0] + '.bam.bai'
-	output: "{sample}/1.assemble/assemble_{genome_size}/misassemblies/misassemblies.tsv"
+		"{sample}/{sequence}.fa", #rules.assemble.output[0],
+		"{sample}/{sequence}.fa.fai", #rules.assemble.output[0] + '.fai',
+		"{sample}/{sequence}.fa.bam",
+		"{sample}/{sequence}.fa.bam.bai"
+	output: "{sample}/{sequence}.misassemblies.tsv" #"{sample}/1.assemble/assemble_{genome_size}/misassemblies/misassemblies.tsv"
 	params:
 		window_width = 2000,
 		min_tig_size = 50000
@@ -102,13 +102,13 @@ rule misassemblies_detect_subasm:
 	    ' > {output}
 		"""
 
-rule misassemblies_final_subasm:
+rule misassemblies_correct:
 	input:
-		rules.misassemblies_detect_subasm.output,
-		rules.assemble.output[0] + ".fai",
-		rules.assemble.output[0]
+		"{sample}/{sequence}.misassemblies.tsv", # rules.misassemblies_detect_subasm.output,
+		"{sample}/{sequence}.fa.fai",
+		"{sample}/{sequence}.fa" #rules.assemble.output[0]
 	output:
-		'{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.contigs.corrected.fasta'
+		"{sample}/{sequence}.corrected.fa"
 	shell:
 		"""
 		cat {input[0]} | grep -v ^# | sort -k1,1g | join - <(sort -k1,1g {input[1]}) | sort -k1,1d -k2,2g | \
@@ -129,9 +129,9 @@ rule misassemblies_final_subasm:
 		END {{ print(prev_tig,prev_coord,prev_len) }}' | sed "s/\(.*\) \(.*\)\ \(.*\)/\\1:\\2-\\3/g" |  xargs samtools faidx {input[2]} \
 		| cut -f1 -d ':' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output[0]}
 
-		cut -f1 {input[0]} > {sample}_{wildcards.genome_size}.tigs.toremove
-		grep -vf {sample}_{wildcards.genome_size}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
-		rm {sample}_{wildcards.genome_size}.tigs.toremove
+		cut -f1 {input[0]} > {sample}/{wildcards.sequence}.tigs.toremove
+		grep -vf {sample}/{wildcards.sequence}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
+		rm {sample}/{wildcards.sequence}.tigs.toremove
 		"""
 
 rule merge:
@@ -142,7 +142,7 @@ rule merge:
 		mem=24
 	singularity: "shub://elimoss/lathe:quickmerge"
 	shell:
-		"merge_wrapper.py {input} -pre {sample}/1.assemble/{sample}_merged -lm 40000 -c 5 -hco 10; mv merged.fasta {output}"
+		"merge_wrapper.py {input} -pre {sample}/1.assemble/{sample}_merged -c 5 -hco 10; mv merged.fasta {output}"
 
 rule contig_size_filter:
 	input:
@@ -581,52 +581,8 @@ def skip_circularization_or_not():
 	else:
 		return(rules.circularize_final.output)
 
-rule misassemblies_detect:
-	input:
-		skip_circularization_or_not(),
-		skip_circularization_or_not()[0] + '.fai',
-		skip_circularization_or_not()[0] + '.bam',
-		skip_circularization_or_not()[0] + '.bam.bai'
-	output: "{sample}/4.break_misassemblies/misassemblies.tsv"
-	params:
-		window_width = 2000,
-		min_tig_size = 50000
-	resources:
-		mem=24,
-		time=6
-	singularity: "shub://elimoss/lathe:htsbox"
-	shell:
-		"""
-	    bedtools makewindows -g {input[1]} -w {params.window_width} | join - {input[1]} | tr ' ' '\t' | \
-	    cut -f1-4 | awk '{{if ($2 > {params.window_width} && $3 < $4 - {params.window_width} && $4 > {params.min_tig_size}) print $0}}' | \
-	    xargs -P 16 -l bash -c '
-	     htsbox samview {input[2]} $0:$1-$1 -p | \
-	     cut -f8,9 | awk "{{if (\$1 < $1 - ({params.window_width}/2) && \$2 > $1 + ({params.window_width}/2)) print \$0}}" | wc -l | \
-	     paste <(echo $0) <(echo $1) - ' | awk '{{if ($3 < 2) print $0}}
-	    ' > {output}
-		"""
-
-rule misassemblies_final:
-	input:
-		rules.misassemblies_detect.output,
-		skip_circularization_or_not()[0] + ".fai",
-		skip_circularization_or_not()
-	output:
-		"{sample}/4.break_misassemblies/{sample}_corrected.fa"
-	shell:
-		"""
-		cat {input[0]} | grep -v ^# | sort -k1,1g | join - <(sort -k1,1g {input[1]}) | xargs -l bash -c "
-			(echo samtools faidx {input[2]} \$0:1-\$1;
-			echo samtools faidx {input[2]} \$0:\$1-\$3;)
-		" | bash | cut -f1 -d ':' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output[0]}
-
-		cut -f1 {input[0]} > {sample}.tigs.toremove
-		grep -vf {sample}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
-		rm {sample}.tigs.toremove
-		"""
-
 rule final:
-	input: rules.misassemblies_final.output
+	input: skip_circularization_or_not()[0].replace('.fa', '.corrected.fa') #perform one last round of misassembly breakage
 	output: "{sample}/5.final/{sample}_final.fa"
 	shell: "cp {input} {output}"
 
