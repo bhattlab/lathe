@@ -142,7 +142,7 @@ rule merge:
 		mem=24
 	singularity: "shub://elimoss/lathe:quickmerge"
 	shell:
-		"merge_wrapper.py {input} -pre {sample}/1.assemble/{sample}_merged -c 5 -hco 10; mv merged.fasta {output}"
+		"merge_wrapper.py {input} -ml 10000 -c 5 -hco 10; mv merged_out.fasta {output}"
 
 rule contig_size_filter:
 	input:
