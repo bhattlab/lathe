@@ -17,7 +17,7 @@ from: ubuntu:19.04
 # this command assumes at least singularity 2.3
 %environment
     PATH="/usr/local/anaconda/bin:$PATH"
-		PATH="/usr/bin/quickmerge/:$PATH"
+		PATH="/usr/bin/quickmerge/:/usr/bin/quickmerge/MUMmer3.23/:$PATH"
 		PATH="/usr/local/anaconda/bin:$PATH"
 %post
     apt-get update
@@ -30,15 +30,11 @@ from: ubuntu:19.04
     apt-get install -y build-essential
 
    #install quickmerge
-   wget https://github.com/mahulchak/quickmerge/archive/v0.2.tar.gz
-   tar -zxf v0.2.tar.gz
-	 mv quickmerge-0.2/ quickmerge
+   wget https://github.com/mahulchak/quickmerge/archive/v0.3.tar.gz
+   tar -zxf v0.3.tar.gz
+	 mv quickmerge-0.3/ quickmerge
 	 cd quickmerge/
    bash make_merger.sh
-	 ln -s merger/quickmerge
-	 (echo '#!/usr/bin/env python'; sed '1d' merge_wrapper.py ) > tmp
-	 mv tmp merge_wrapper.py
-	 chmod a+x merge_wrapper.py
 	 cd ..
 	 mv quickmerge /usr/bin/
 
@@ -52,5 +48,3 @@ from: ubuntu:19.04
          rm ~/anaconda.sh
     fi
 		export PATH="/usr/local/anaconda/bin:$PATH"
-
-		conda install -c bioconda mummer
