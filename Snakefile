@@ -79,11 +79,11 @@ rule assemble:
 
 rule misassemblies_detect:
 	input:
-		"{sample}/{sequence}.fa", #rules.assemble.output[0],
-		"{sample}/{sequence}.fa.fai", #rules.assemble.output[0] + '.fai',
-		"{sample}/{sequence}.fa.bam",
-		"{sample}/{sequence}.fa.bam.bai"
-	output: "{sample}/{sequence}.misassemblies.tsv" #"{sample}/1.assemble/assemble_{genome_size}/misassemblies/misassemblies.tsv"
+		"{sample}/{sequence}.fa{sta}", #rules.assemble.output[0],
+		"{sample}/{sequence}.fa{sta}.fai", #rules.assemble.output[0] + '.fai',
+		"{sample}/{sequence}.fa{sta}.bam",
+		"{sample}/{sequence}.fa{sta}.bam.bai"
+	output: "{sample}/{sequence}.fa{sta}.misassemblies.tsv" #"{sample}/1.assemble/assemble_{genome_size}/misassemblies/misassemblies.tsv"
 	params:
 		window_width = 2000,
 		min_tig_size = 50000
@@ -104,14 +104,14 @@ rule misassemblies_detect:
 
 rule misassemblies_correct:
 	input:
-		"{sample}/{sequence}.misassemblies.tsv", # rules.misassemblies_detect_subasm.output,
-		"{sample}/{sequence}.fa.fai",
-		"{sample}/{sequence}.fa" #rules.assemble.output[0]
+		"{sample}/{sequence}.fa{sta}.misassemblies.tsv", # rules.misassemblies_detect_subasm.output,
+		"{sample}/{sequence}.fa{sta}.fai",
+		"{sample}/{sequence}.fa{sta}" #rules.assemble.output[0]
 	output:
-		"{sample}/{sequence}.corrected.fa"
+		"{sample}/{sequence}.corrected.fa{sta}"
 	shell:
 		"""
-		cat {input[0]} | grep -v ^# | sort -k1,1g | join - <(sort -k1,1g {input[1]}) | sort -k1,1d -k2,2g | \
+		cat {input[0]} | grep -v ^# | sort -k1,1 -k2,2g | join - <(cat {input[1]} | sort -k1,1 -k2,2g) | \
 		awk '{{
 		if ($1 == prev_tig){{
 		 print($1,prev_coord,$2)
@@ -238,7 +238,7 @@ rule align_short_reads:
 	params:
 		reads = config['short_reads'].split(',')
 	resources:
-		mem=48,
+		mem=100,
 		time=24
 	singularity: singularity_image
 	shell:
@@ -324,7 +324,7 @@ rule pilon_aggregate_vcf:
 		touch {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz.tbi
 
 		#get properly sorted intervals
-		ls {sample}/2.polish/pilon/ranges/ | tr ':-' '\t' | sort -k1,1d -k2,2g | awk '{{print $1,":",$2,"-",$3}}' | tr -d ' ' > sorted_ranges.tmp
+		ls {sample}/2.polish/pilon/ranges/ | tr ':-' '\t' | sort -k1,1 -k2,2g | awk '{{print $1,":",$2,"-",$3}}' | tr -d ' ' > sorted_ranges.tmp
 
 		#get header
 		(zcat {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz | head -1000 | grep ^#
@@ -334,7 +334,7 @@ rule pilon_aggregate_vcf:
 		tabix {sample}/2.polish/pilon/sub_runs/foo/{sample}_foo.vcf.gz foo | grep -v '0/0' | grep -v DUP" |
 
 		#sort by position
-		sort -k1,1d -k2,2g) |
+		sort -k1,1 -k2,2g) |
 
 		#compress and store
 		bgzip > {output} || true
@@ -559,7 +559,7 @@ rule circularize_final:
 		aggregate_overcirc_trim,
 		aggregate_span_trim
 	output:
-		'{sample}/3.circularization/4.{sample}_circularized.fa'
+		'{sample}/3.circularization/4.{sample}_circularized.fasta'
 	threads: 1
 	singularity: singularity_image
 	shell:
@@ -582,7 +582,7 @@ def skip_circularization_or_not():
 		return(rules.circularize_final.output)
 
 rule final:
-	input: skip_circularization_or_not()[0].replace('.fa', '.corrected.fa') #perform one last round of misassembly breakage
+	input: skip_circularization_or_not()[0].replace('.fasta', '.corrected.fasta') #perform one last round of misassembly breakage
 	output: "{sample}/5.final/{sample}_final.fa"
 	shell: "cp {input} {output}"
 
