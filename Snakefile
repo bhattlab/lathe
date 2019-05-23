@@ -153,10 +153,7 @@ rule contig_size_filter:
 
 def choose_contig_cutoff(wildcards):
 	if 'min_contig_size' in config and int(config['min_contig_size'] > 0):
-		return(expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.mincontig_{contig_cutoff}.fasta",
-			g = config['genome_size'].split(","),
-			contig_cutoff = config['min_contig_size']
-			))
+		return(rules.contig_size_filter.output)
 	else:
 		return(rules.merge.output)
 
