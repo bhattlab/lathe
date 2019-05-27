@@ -73,14 +73,13 @@ from: ubuntu:19.04
 
     # requirements for long read workflow
     conda install -y -c conda-forge -c bioconda \
-       python>3.5 pilon bwa minimap2 \
+       python=3.6 pilon bwa minimap2 \
        bedtools bedops biopython tabix ncurses \
        datrie nanoplot mummer racon
 
    conda install -y -c bioconda -c biobuilds samtools=1.9 openssl=1.0
 
-
-	 conda remove bcftools
+	 conda remove bcftools #avoid superceding the custom bcftools previously set up
 
    # tombo for methylation
    # conda create -c bioconda -n tombo ont-tombo
@@ -89,7 +88,6 @@ from: ubuntu:19.04
    pip install snakemake
 
 	 pip install medaka
-	 #conda install -c bioconda medaka
 
 %runscript
    exec /bin/bash
