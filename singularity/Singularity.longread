@@ -81,14 +81,15 @@ from: ubuntu:19.04
 
 
 	 conda remove bcftools
-	 
+
    # tombo for methylation
    # conda create -c bioconda -n tombo ont-tombo
    # source activate tombo
 
    pip install snakemake
 
-	 pip install medaka
+	 #pip install medaka
+	 conda install -c bioconda medaka
 
 %runscript
    exec /bin/bash
