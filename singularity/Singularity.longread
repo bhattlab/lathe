@@ -88,8 +88,8 @@ from: ubuntu:19.04
 
    pip install snakemake
 
-	 #pip install medaka
-	 conda install -c bioconda medaka
+	 pip install medaka
+	 #conda install -c bioconda medaka
 
 %runscript
    exec /bin/bash
