@@ -9,28 +9,29 @@ import glob
 
 localrules: pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
 
+#create dictionary of fast5 absolute paths and subfolder names. This will be used to set up the inputs and outputs for rule basecall.
 sample = config['sample_name']
 fast5_dirs = [l.strip() for l in open(config['fast5_dirs_list'], 'r').readlines()]
 fast5_abspath_run_subfolder = {}
 fast5_run_subfolder_abspath = {}
-
-singularity_image = config['singularity']
-
 for d in fast5_dirs:
 	run_subfolder = "/".join([d.split("/")[::-1][2], d.split("/")[::-1][0]])
 	fast5_abspath_run_subfolder[run_subfolder] = d
 	fast5_run_subfolder_abspath[d] = run_subfolder
 
+#set up singularity image used for the bulk of rules
+singularity_image = config['singularity']
+
 rule all:
 	input:
-		#"{sample}/2.polish/{sample}_polished.fa".format(sample = sample),
-		"{sample}/5.final/{sample}_final.fa".format(sample = sample), #this must be commented out until after the workflow has reached the first output
-		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample)
+		"{sample}/5.final/{sample}_final.fa".format(sample = sample), #request final output
+		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample) #request QC data
 
 #Basecalling and assembly
 #########################################################
 
 rule basecall:
+	#Call bases from raw fast5 data with guppy basecaller. Called once per input folder of fast5 files.
 	input: lambda wildcards: fast5_abspath_run_subfolder["/".join([wildcards.run, wildcards.subfolder])]
 	output: '{sample}/0.basecall/raw_calls/{run}/{subfolder}/sequencing_summary.txt'
 	threads: 4
@@ -43,12 +44,15 @@ rule basecall:
 		"--flowcell {fc} --kit {k}" .format(fc=config['flowcell'], k = config['kit'])
 
 rule basecall_final:
+	#Collate called bases into a single fastq file
 	input: expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
 	output: '{sample}/0.basecall/{sample}.fq'
 	shell:
 		"find {sample}/0.basecall/raw_calls/*/*/*.fastq | xargs cat > {output}"
 
 rule nanoplot:
+	#Run nanoplot on the collated .fq file containing basecalled reads. This produces helpful stats
+	#such as read length and basecall qualities
 	input: rules.basecall_final.output
 	output: '{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'
 	resources:
@@ -58,6 +62,10 @@ rule nanoplot:
 	shell: "NanoPlot --fastq {input} -t {threads} --color green  -o " + "{s}/0.basecall/nanoplots".format(s = sample)
 
 rule assemble:
+	#Run canu. This can be run either in distributed fashion on the cluster or in a single job. If run in distributed fashion (usedgrid is set to 'True')
+	#then canu must be installed in the user's environment. In this case, the singualarity image is not used. Canu arguments are passed through from
+	#the config within the 'canu_args' key. 'gridOptions' are also passed through from the config and instruct Canu on any additional parameters
+	#needed to run on the cluster.
 	input: rules.basecall_final.output
 	output:
 		'{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.contigs.fasta',
@@ -78,6 +86,11 @@ rule assemble:
 
 
 rule misassemblies_detect:
+	#Detect regions in the assembly which are not spanned by more than a single long read, indicating likely misassemblies.
+	#This is done by first generating a list of all non-overlapping windows of specified length tiled across the assembly. For each,
+	#aligned reads are retrieved and the start and endpoints of their alignments are determined. These are filtered for those alignments
+	#which span completely across the window. This approach is premised on misasssemblies causing clipped read alignments which can then be
+	#identified as alignments which do not span the misassembled locus.
 	input:
 		"{sample}/{sequence}.fa{sta}", #rules.assemble.output[0],
 		"{sample}/{sequence}.fa{sta}.fai", #rules.assemble.output[0] + '.fai',
@@ -103,10 +116,13 @@ rule misassemblies_detect:
 		"""
 
 rule misassemblies_correct:
+	#Given a list of misassembled loci identified in the rule misassemblies_detect, break the assembly at each location.
+	#This must accommodate instances where multiple breaks occur in a single contig, producing multiple contigs with successive
+	#numbers appended to the name of the original unbroken contig.
 	input:
-		"{sample}/{sequence}.fa{sta}.misassemblies.tsv", # rules.misassemblies_detect_subasm.output,
+		"{sample}/{sequence}.fa{sta}.misassemblies.tsv",
 		"{sample}/{sequence}.fa{sta}.fai",
-		"{sample}/{sequence}.fa{sta}" #rules.assemble.output[0]
+		"{sample}/{sequence}.fa{sta}"
 	output:
 		"{sample}/{sequence}.corrected.fa{sta}"
 	shell:
@@ -134,7 +150,9 @@ rule misassemblies_correct:
 		rm {sample}/{wildcards.sequence}.tigs.toremove
 		"""
 
+
 rule merge:
+	#Conservatively merge the two subassemblies
 	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.corrected.fasta", g = config['genome_size'].split(","))
 	output: "{sample}/1.assemble/{sample}_merged.fasta"
 	resources:
@@ -145,6 +163,8 @@ rule merge:
 		"merge_wrapper.py {input} -ml 10000 -c 5 -hco 10; mv merged_out.fasta {output}"
 
 rule contig_size_filter:
+	#Optional convenience function. Filter out contigs below a certain size. Not used by default,
+	#but requested by users with specific use cases.
 	input:
 		rules.merge.output[0],
 		rules.merge.output[0] + '.fai'
@@ -152,27 +172,30 @@ rule contig_size_filter:
 	shell: "sort -k2,2gr {input[1]} | awk '{{if ($2 > {wildcards.contig_cutoff}) print $1}}' | xargs samtools faidx {input[0]} > {output}"
 
 def choose_contig_cutoff(wildcards):
+	#If a contig cutoff is specified in the config, then perform a size cutoff on the assembled contigs by
+	#requesting the output of the relevant rule.
 	if 'min_contig_size' in config and int(config['min_contig_size'] > 0):
 		return(rules.contig_size_filter.output)
 	else:
 		return(rules.merge.output)
 
 rule assemble_final:
+	#Request the final output of the assembly phase of the pipeline. Some minor cleanup and a uniquefication of the contig names
+	#are performed.
 	input: choose_contig_cutoff
 	output: "{sample}/1.assemble/{sample}_raw_assembly.fa"
 	shell:
 		"cat {input} | cut -f1 -d '_' | fold -w 120 | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}"
 
 
-		#"cp {input[0]} {output}" #request all specified assemblies, but use the first genome size listed in the config
-		#"cat {input} | cut -f1 -d '_' | fold -w 120 | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output}" #sed 's/\.tig/\\ttig/g' | tr '_' '\\t' | " +
-		#"cut -f1,9,17 | tr '\\t' '_'
-
 #Polishing
 #########################################################
 
 def choose_polish(wildcards):
-	#skip_polish_or_not(wildcards)
+	#Determine which type of polishing should be performed. Options are short read (requires a dataset), long read,
+	#both, and none. These are controlled by the skip_polishing and short_read variables in the config. Long read
+	#is the default. Short read is performed instead if short reads are provided. No polishing is specified with the
+	#skip_polishing config variable.
 	if 'skip_polishing' in config and (config['skip_polishing'] == True or config['skip_polishing'] == 'True'):
 		return(rules.assemble_final.output)
 	elif config['short_reads'] != '':
@@ -181,13 +204,15 @@ def choose_polish(wildcards):
 		return(rules.medaka.output)
 
 def choose_pilon_input():
+	#allows consensus refinement with both long read and short read polishing if the polish_both variable is given the value
+	#True in the config file.
 	if 'polish_both' in config and config['polish_both'] == True:
 		return(rules.medaka.output)
 	else:
 		return(rules.assemble_final.output)
 
 def get_racon_input(wildcards):
-	#this method will choose a previous iteration of racon or the original assembly, depending on the value of the iteration wildcard
+	#this method will choose a previous iteration of racon or the unpolished assembly, depending on the value of the iteration wildcard
 	if int(wildcards.iteration) == 1:
 		return(rules.assemble_final.output[0] + '.paf', rules.assemble_final.output[0])
 	else:
@@ -195,6 +220,7 @@ def get_racon_input(wildcards):
 		return(result + '.paf', result)
 
 rule racon:
+	#Perform long read polishing with racon. This rule is used in multiple iterations.
 	input:
 		rules.basecall_final.output,
 		get_racon_input
@@ -211,6 +237,8 @@ rule racon:
 		"""
 
 rule medaka:
+	#Perform long read polishing with medaka. This is used following multiple iterations of racon polishing. The
+	#number of iterations is specified in the input filename below.
 	input:
 		rules.basecall_final.output,
 		'{sample}/2.polish/racon/{sample}_racon_4.fa' # request four iterations of racon, as specified by medaka docs
@@ -227,6 +255,8 @@ rule medaka:
 		"""
 
 rule align_short_reads:
+	#Align short reads to the unpolished or longread-polished assembly, depending on the output of
+	#the choose_pilon_input rule above.
 	input:
 		choose_pilon_input(),
 		config['short_reads'].split(',')
@@ -242,6 +272,9 @@ rule align_short_reads:
 		"bwa index {input[0]}; bwa mem -t {threads} {input} | samtools sort --threads {threads} > {output}"
 
 checkpoint pilon_ranges:
+	#Generate a large collection of intervals within the assembly for individual parallelized polishing with Pilon.
+	#This is done with bedtools makewindows, but the result is stored as a collection of empty files so Snakemake can
+	#handle subsequent parallelization of the Pilon jobs.
 	input:
 		choose_pilon_input(),
 		choose_pilon_input()[0] + '.fai'
@@ -255,6 +288,8 @@ checkpoint pilon_ranges:
 		"""
 
 rule pilon_subsetrun:
+	#Run Pilon on a small subset of the assembly. Short reads mapping to the window are selected and downsampled to 50x target
+	#coverage, greatly reducing the computational cost of polishing the region.
 	input:
 		choose_pilon_input(),
 		rules.align_short_reads.output,
@@ -300,6 +335,8 @@ rule pilon_subsetrun:
 		"""
 
 def aggregate_pilon_subsetruns(wildcards):
+	#The individually polished sub-regions of the overall assembly must be collected into a consensus assembly. This rule
+	#gathers all the outputs that have been generated for input into the aggregation rule.
 	checkpoint_output = checkpoints.pilon_ranges.get(**wildcards).output[0]
 	result = expand(rules.pilon_subsetrun.output,
 		sample=wildcards.sample,
@@ -307,6 +344,10 @@ def aggregate_pilon_subsetruns(wildcards):
 	return(result)
 
 rule pilon_aggregate_vcf:
+	#In order to aggregate the changes made during short read polishing, this rule collects the contents of all
+	#VCF files generated in the subset runs in preparation to generate a corrected consensus fasta. In order that
+	#consensus sequence generation doesn't trip up, this VCF must be carefully deduplicated and sorted before
+	#being compressed and indexed.
 	input:
 		aggregate_pilon_subsetruns
 	output:
@@ -341,6 +382,7 @@ rule pilon_aggregate_vcf:
 		"""
 
 rule pilon_consensus:
+	#Generate short read polished consensus sequence from all changes contained within the aggregated VCF file.
 	input:
 		choose_pilon_input(),
 		rules.pilon_aggregate_vcf.output
@@ -351,9 +393,10 @@ rule pilon_consensus:
 		"""
 		bcftools consensus -f {input} -o {output}
 		"""
-			#&& rm -rf {sample}/2.polish/pilon/sub_runs {sample}/2.polish/pilon/ranges
 
 rule polish_final:
+	#Generate the final output of the polishing phase, whether that's with short reads, long reads, both or neither.
+	#Colons and any following characters are omitted from contig names.
 	input: choose_polish
 	output: "{sample}/2.polish/{sample}_polished.fa"
 	shell:
@@ -365,6 +408,7 @@ rule polish_final:
 #########################################################
 
 rule circularize_mapreads:
+	#Map long reads to polished assembly
 	input:
 		rules.polish_final.output,
 		'{sample}/1.assemble/assemble_{g}/{sample}_{g}.correctedReads.fasta.gz'.format(
@@ -385,6 +429,8 @@ rule circularize_mapreads:
 		"""
 
 checkpoint extract_bigtigs:
+	#Only genome-scale contigs are tested for circularity. This rule defines what size that is and extracts those contigs
+	#to individual fasta files.
 	input:
 		rules.polish_final.output,
 		rules.polish_final.output[0] + ".fai",
@@ -401,6 +447,7 @@ checkpoint extract_bigtigs:
 		"""
 
 rule circularize_bam2reads:
+	#Extracts reads mapping to the genome-scale contigs to be tested for circularity. These reads are reformatted to fastq and compressed.
 	input:
 		rules.circularize_mapreads.output,
 		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa"
@@ -415,6 +462,8 @@ rule circularize_bam2reads:
 		"""
 
 rule circularize_assemble:
+	#Reads extracted in circularize_bam2reads are assembled with Canu in order to recover a contig spanning the two
+	#ends of a circular genome contig
 	input:
 		rules.circularize_bam2reads.output
 	output: "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}.contigs.fasta"
@@ -431,13 +480,10 @@ rule circularize_assemble:
 		-nanopore-corrected {input} genomeSize=100000
 		"""
 
-		# """
-		# canu -useGrid=False -assemble -p {params.prefix} -d {params.directory}  \
-		# -nanopore-corrected {input} genomeSize=100000 gridOptions='{params.gridopts}' \
-		# batMemory=128 batThreads=1
-		# """
-
 rule circularize_spantig_pre:
+	#Prepare to determine if the contig assembled in circularize_assemble actually spans the two ends of the putative genome contig.
+	#Preparation entails performing an alignment of the potentially spanning contig to the putative genome contig and post-processing
+	#the result.
 	input:
 		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa", #rules.extract_bigtigs.output
 		rules.circularize_assemble.output,
@@ -465,6 +511,8 @@ rule circularize_spantig_pre:
 		"""
 
 rule circularize_spantig:
+	#Run the script which determines if the putative genome contig is spanned by the smaller contig assembled from terminal reads,
+	#indicating circularity.
 	input: rules.circularize_spantig_pre.output
 	output: "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/contig_spanned.txt"
 	params:
@@ -473,6 +521,7 @@ rule circularize_spantig:
 		"scripts/spancircle.py"
 
 rule circularize_span_trim:
+	#Trim circularized genome contigs at the determined wrap-around point
 	input:
 		rules.circularize_spantig.output,
 		rules.extract_bigtigs.output[0] + '{tig}.fa',
@@ -502,6 +551,7 @@ rule circularize_span_trim:
 		open(output[0], 'w').write(cmd + '\n')
 
 def aggregate_span_trim(wildcards):
+	#Collect the genome sequences produced by spanning contig circularization
 	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output[0]
 	result = expand(rules.circularize_span_trim.output, #"{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_trim.sh",
 		sample=wildcards.sample,
@@ -509,6 +559,9 @@ def aggregate_span_trim(wildcards):
 	return(result)
 
 rule circularize_overcirc:
+	#Test putative genome contigs for circularity by self-alignment and determination of 'overcircularization',
+	#assembly beyond the circular wraparound point. This produces redundant sequences at the termini of the putative
+	#genome contig which can be determined by corner-cutting off-diagonal alignments in a self-alignment dotplot.
 	input:
 		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa"
 	output: "{sample}/3.circularization/2.circularization/overcircularized/overcirc_{tig}.txt"
@@ -520,6 +573,7 @@ rule circularize_overcirc:
 		"scripts/encircle.py"
 
 rule circularize_overcirc_trim:
+	#Trim the genome contig circularized by overcircularization detection according to the determined wraparound point.
 	input:
 		rules.circularize_overcirc.output,
 		rules.extract_bigtigs.output[0] + "{tig}.fa",
@@ -543,6 +597,7 @@ rule circularize_overcirc_trim:
 		open(output[0], 'w').write(cmd + '\n')
 
 def aggregate_overcirc_trim(wildcards):
+	#Collect the circular genome sequences obtained by overcircularization detection.
 	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output[0]
 	result = expand(rules.circularize_overcirc_trim.output, #"{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_overcirc.sh",
 		sample=wildcards.sample,
@@ -550,6 +605,9 @@ def aggregate_overcirc_trim(wildcards):
 	return(result)
 
 rule circularize_final:
+	#Collect the circular genome sequences and add them back into the total assembly fasta files
+	#This is done by generating a .sh file for each putative genome which either yields the circularized
+	#sequence or no sequence, depending on whether circularization was successful.
 	input:
 		rules.polish_final.output,
 		rules.polish_final.output[0] + '.fai',
@@ -573,12 +631,14 @@ rule circularize_final:
 #########################################################
 
 def skip_circularization_or_not():
+	#Allows all circularization to be skipped when unneeded
 	if config['skip_circularization'] == 'True' or config['skip_circularization'] == True:
 		return(rules.polish_final.output)
 	else:
 		return(rules.circularize_final.output)
 
 rule final:
+	#Perform one last round of misassembly detection and removal, followed by generation of the final output assembly file
 	input: skip_circularization_or_not()[0].replace('.fasta', '.corrected.fasta') #perform one last round of misassembly breakage
 	output: "{sample}/5.final/{sample}_final.fa"
 	shell: "cp {input} {output}"
@@ -587,6 +647,7 @@ rule final:
 #########################################################
 
 rule align_paf:
+	#Align long reads to a fasta, storing the result in .paf format.
 	input:
 		'{ref}.f{asta}',
 		'{sample}/0.basecall/{sample}.fq'.format(sample = sample)
@@ -598,6 +659,7 @@ rule align_paf:
 		"minimap2 -t {threads} -x map-ont {input} > {output}"
 
 rule align_bam:
+	#Align long reads to a fasta, storing the result in .bam format.
 	input:
 		'{ref}.f{asta}', #the asta bit makes this work for .fa and .fasta files
 		'{sample}/0.basecall/{sample}.fq'.format(sample = sample)
@@ -612,6 +674,7 @@ rule align_bam:
 		"minimap2 -t {threads} -ax map-ont {input} | samtools sort --threads {threads} > {output}"
 
 rule bam_idx:
+	#index a .bam file
 	input:
 		'{some}.bam'
 	output:
@@ -621,6 +684,7 @@ rule bam_idx:
 		"samtools index {input}"
 
 rule faidx:
+	#index a .fasta file
 	input: '{something}.f{asta}'
 	output: '{something}.f{asta}.fai'
 	singularity: singularity_image
