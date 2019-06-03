@@ -259,7 +259,7 @@ rule medaka_consensus:
 	singularity: singularity_image
 	threads: 4
 	resources:
-		mem=16,
+		mem=24,
 		time=12
 	shell:
 		"""
@@ -273,10 +273,10 @@ rule medaka_stitch:
 		rules.medaka_consensus.output,
 		"{sample}/2.polish/medaka/sub_fa/{range}.fa"
 	output: '{sample}/2.polish/medaka/subruns/{range}_medaka.fa'
-	threads: 16
+	threads: 1
 	resources:
-		mem=32,
-		time=100
+		mem=16,
+		time=12
 	singularity: singularity_image
 	shell:
 		"""
