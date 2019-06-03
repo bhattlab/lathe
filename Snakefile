@@ -201,13 +201,13 @@ def choose_polish(wildcards):
 	elif config['short_reads'] != '':
 		return(rules.pilon_consensus.output)
 	else:
-		return(rules.medaka.output)
+		return(rules.medaka_aggregate.output)
 
 def choose_pilon_input():
 	#allows consensus refinement with both long read and short read polishing if the polish_both variable is given the value
 	#True in the config file.
 	if 'polish_both' in config and config['polish_both'] == True:
-		return(rules.medaka.output)
+		return(rules.medaka_aggregate.output)
 	else:
 		return(rules.assemble_final.output)
 
@@ -236,13 +236,43 @@ rule racon:
 		racon -m 8 -x -6 -g -8 -w 500 -t {threads} {input} > {output}
 		"""
 
-rule medaka:
+checkpoint medaka_ranges:
+	input:
+		'{sample}/2.polish/racon/{sample}_racon_4.fa', # request four iterations of racon, as specified by medaka docs
+		'{sample}/2.polish/racon/{sample}_racon_4.fa.fai' # request four iterations of racon, as specified by medaka docs
+	output:
+		directory('{sample}/2.polish/medaka/ranges'),
+		directory('{sample}/2.polish/medaka/sub_fa')
+	singularity: singularity_image
+	shell:
+		"""
+		mkdir -p {output}
+		cut -f1 {input[1]} | xargs -n 1 -I foo sh -c 'touch {output[0]}/foo; samtools faidx {input[0]} foo > {output[1]}/foo.fa'
+		"""
+
+rule medaka_consensus:
+	input:
+		"{sample}/2.polish/medaka/ranges/{range}",
+		"{sample}/2.polish/racon/{sample}_racon_4.fa.bam"
+	output:
+		"{sample}/2.polish/medaka/subruns/{range}_probs.hdf"
+	singularity: singularity_image
+	threads: 4
+	resources:
+		mem=16,
+		time=12
+	shell:
+		"""
+		medaka consensus {input[1]} {output} --model r941_flip213 --threads {threads} --regions {wildcards.range}
+		"""
+
+rule medaka_stitch:
 	#Perform long read polishing with medaka. This is used following multiple iterations of racon polishing. The
 	#number of iterations is specified in the input filename below.
 	input:
-		rules.basecall_final.output,
-		'{sample}/2.polish/racon/{sample}_racon_4.fa' # request four iterations of racon, as specified by medaka docs
-	output: '{sample}/2.polish/medaka/{sample}_medaka.fa'
+		rules.medaka_consensus.output,
+		"{sample}/2.polish/medaka/sub_fa/{range}.fa"
+	output: '{sample}/2.polish/medaka/subruns/{range}_medaka.fa'
 	threads: 16
 	resources:
 		mem=32,
@@ -250,8 +280,29 @@ rule medaka:
 	singularity: singularity_image
 	shell:
 		"""
-		medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.polish/medaka -t {threads} -m r941_flip213
-		cut -f1 -d ':' {sample}/2.polish/medaka/consensus.fasta > {output}
+		medaka stitch {input[0]} {input[1]} {output}
+		"""
+
+#		medaka_consensus -i {input[0]} -d {input[1]} -o {sample}/2.polish/medaka -t {threads} -m r941_flip213
+#		cut -f1 -d ':' {sample}/2.polish/medaka/consensus.fasta > {output}
+#		"""
+
+def aggregate_medaka_subsetruns(wildcards):
+	#The individually polished sub-regions of the overall assembly must be collected into a consensus assembly. This rule
+	#gathers all the outputs that have been generated for input into the aggregation rule.
+	checkpoint_output = checkpoints.medaka_ranges.get(**wildcards).output[0]
+	result = expand(rules.medaka_stitch.output,
+		sample=wildcards.sample,
+		range=glob_wildcards(os.path.join(checkpoint_output, '{range,tig.+}')).range)
+	return(result)
+
+
+rule medaka_aggregate:
+	input: aggregate_medaka_subsetruns
+	output: "{sample}/2.polish/medaka/{sample}_medaka.fa"
+	shell:
+		"""
+		cat {input} | cut -f1 -d ':' > {output}
 		"""
 
 rule align_short_reads:
@@ -284,7 +335,7 @@ checkpoint pilon_ranges:
 		"""
 		mkdir {output}
 		bedtools makewindows -w 100000 -g {input[1]} | awk '{{print $1,\":\", $2+ 1, \"-\", $3}}'  | tr -d ' ' |
-		xargs -n 1 -I foo touch {sample}/2.polish/pilon/ranges/foo
+		xargs -n 1 -I foo touch {output}/foo
 		"""
 
 rule pilon_subsetrun:
