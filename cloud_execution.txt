@@ -1,0 +1,31 @@
+#install the google cloud sdk
+#module add  google-cloud-sd *might* be good enough on SCG, but untested
+wget https://dl.google.com/dl/cloudsdk/channels/rapid/downloads/google-cloud-sdk-249.0.0-linux-x86_64.tar.gz
+#unpack and set up
+
+#now then...
+#first time setup
+gcloud init #for the time being, must be a non-stanford account (i.e. personal)
+gcloud components install kubectl
+conda create -n dev python=3.6
+source activate dev
+pip install --upgrade google-cloud-storage
+pip install snakemake
+
+#every time setup
+export CLUSTER_NAME=mosscluster
+export NODES=12
+gcloud container clusters create $CLUSTER_NAME --num-nodes=$NODES --scopes=storage-rw
+gcloud container clusters get-credentials $CLUSTER_NAME --region us-central1-a
+gcloud auth application-default login #this needs to be the account used for google storage
+
+#work
+export REMOTE=GS
+export PREFIX=gbsc-gcp-lab-bhatt-user-elimoss/kubernetes
+export SNAKEFILE=~/tools/lathe/Snakefile
+snakemake -s $SNAKEFILE --kubernetes --use-singularity --default-remote-provider $REMOTE --default-remote-prefix $PREFIX --configfile config.yaml --container-image docker://quay.io/biocontainers/snakemake:5.5.0--0
+
+#this theoretically should do it. unfortunately, I seem to have run into a bug where the prefix is prepended twice, screwing up DAG construction. And that's where I think I'm leaving it.
+
+#teardown
+gcloud container clusters delete $CLUSTER_NAME
