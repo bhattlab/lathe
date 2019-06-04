@@ -257,7 +257,7 @@ rule medaka_consensus:
 	output:
 		"{sample}/2.polish/medaka/subruns/{range}_probs.hdf"
 	singularity: singularity_image
-	threads: 4
+	threads: 1
 	resources:
 		mem=24,
 		time=12
