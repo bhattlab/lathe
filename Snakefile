@@ -259,8 +259,8 @@ rule medaka_consensus:
 	singularity: singularity_image
 	threads: 1
 	resources:
-		mem=4,
-		time=12
+		mem=lambda wildcards, attempt: attempt * 8,
+		time=lambda wildcards, attempt: attempt * 12
 	shell:
 		"""
 		medaka consensus {input[1]} {output} --model r941_flip213 --threads {threads} --regions {wildcards.range}
