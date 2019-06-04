@@ -259,7 +259,7 @@ rule medaka_consensus:
 	singularity: singularity_image
 	threads: 1
 	resources:
-		mem=24,
+		mem=4,
 		time=12
 	shell:
 		"""
