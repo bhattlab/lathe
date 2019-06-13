@@ -673,8 +673,8 @@ rule circularize_final:
 		cat {sample}/3.circularization/3.circular_sequences/sh/* | bash
 		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1 -d '_' > circs.tmp || true
 		(cat {input[1]} | grep -vf circs.tmp |
-		cut -f1 | xargs samtools faidx {input[0]}; cat {sample}/3.circularization/3.circular_sequences/*.fa) |
-		sed 's/\([ACTG]\)\\n/\1/g' | fold -w 120 | cut -f1 -d ':' > {output}
+		cut -f1 | xargs samtools faidx {input[0]}; ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | xargs cat) |
+		sed 's/\([ACTG]\)\\n/\1/g' | fold -w 120 | cut -f1 -d ':' > {output} || true
 		#rm circs.tmp
 		"""
 
