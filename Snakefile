@@ -134,6 +134,7 @@ rule misassemblies_correct:
 		"{sample}/{sequence}.fa{sta}"
 	output:
 		"{sample}/{sequence}.corrected.fa{sta}"
+	singularity: singularity_image
 	shell:
 		"""
 		cat {input[0]} | grep -v ^# | sort -k1,1 -k2,2g | join - <(cat {input[1]} | sort -k1,1 -k2,2g) | \
