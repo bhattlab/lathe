@@ -16,4 +16,7 @@ short_reads: '' #Comma-separated forward and reverse optionally gzipped fastq fi
 canu_args: 'cnsThreads=2 cnsMemory=32'
 usegrid: True #should Canu use the grid?
 grid_options: '--time=80:00:00 --account asbhatt'
-genome_size: '50m,100m'
+genome_size: '50m,100m' #Estimated genome size. The default values work well for typical healthy human gut samples.
+                        #A single value can be specified instead, which will perform only one assembly and bypass
+                        #merging. This would be suitable for bacterial isolate data, small datasets or very simple
+                        #metagenomes.

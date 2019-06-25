@@ -8,7 +8,7 @@ import os
 import glob
 from pathlib import Path
 
-localrules: basecall_staging, pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
+localrules: no_merge, basecall_staging, pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
 
 #set up singularity image used for the bulk of rules
 singularity_image = "shub://elimoss/lathe:longread"
@@ -172,12 +172,24 @@ rule merge:
 	shell:
 		"merge_wrapper.py {input} -ml 10000 -c 5 -hco 10; mv merged_out.fasta {output}"
 
+rule no_merge:
+	input: "{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.corrected.fasta".format(g = config['genome_size'])
+	output: "{sample}/1.assemble/{sample}_nomerge.fasta"
+	shell:
+		"ln -s {input} {output}"
+
+def choose_merge():
+	if len(config['genome_size'].split(",")) == 1:
+		return(rules.no_merge.output)
+	else:
+		return(rules.merge.output)
+
 rule contig_size_filter:
 	#Optional convenience function. Filter out contigs below a certain size. Not used by default,
 	#but requested by users with specific use cases.
 	input:
-		rules.merge.output[0],
-		rules.merge.output[0] + '.fai'
+		choose_merge()[0],
+		choose_merge()[0] + '.fai'
 	output: '{sample}/1.assemble/{sample}_merged_mincontig_{contig_cutoff}.fasta',
 	shell: "sort -k2,2gr {input[1]} | awk '{{if ($2 > {wildcards.contig_cutoff}) print $1}}' | xargs samtools faidx {input[0]} > {output}"
 
@@ -187,7 +199,7 @@ def choose_contig_cutoff(wildcards):
 	if 'min_contig_size' in config and int(config['min_contig_size'] > 0):
 		return(rules.contig_size_filter.output)
 	else:
-		return(rules.merge.output)
+		return(choose_merge()[0])
 
 rule assemble_final:
 	#Request the final output of the assembly phase of the pipeline. Some minor cleanup and a uniquefication of the contig names
