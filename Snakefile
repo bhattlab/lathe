@@ -6,49 +6,58 @@ Author: Eli Moss
 
 import os
 import glob
+from pathlib import Path
 
-localrules: pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
-
-#create dictionary of fast5 absolute paths and subfolder names. This will be used to set up the inputs and outputs for rule basecall.
-sample = config['sample_name']
-fast5_dirs = [l.strip() for l in open(config['fast5_dirs_list'], 'r').readlines()]
-fast5_abspath_run_subfolder = {}
-fast5_run_subfolder_abspath = {}
-for d in fast5_dirs:
-	run_subfolder = "/".join([d.split("/")[::-1][2], d.split("/")[::-1][0]])
-	fast5_abspath_run_subfolder[run_subfolder] = d
-	fast5_run_subfolder_abspath[d] = run_subfolder
+localrules: basecall_staging, pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
 
 #set up singularity image used for the bulk of rules
-singularity_image = config['singularity']
+singularity_image = "shub://elimoss/lathe:longread"
+
+#extract samplename from config
+sample = config['sample_name']
+
+#find fast5 files. These are expected to be below the directory provided in the config. All fast5's in this directory will be processed.
+fast5_files = glob.glob(os.path.join(config['fast5_directory'], '**', '*.fast5'), recursive=True) #list provided directory recursively
+#create a dictionary which relates fast5 basenames to the full path of each file
+fast5_basename_to_path = {}
+for f in fast5_files:
+	fast5_basename_to_path[os.path.splitext(os.path.basename(f))[0]] = f
 
 rule all:
 	input:
 		"{sample}/5.final/{sample}_final.fa".format(sample = sample), #request final output
-		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample) #request QC data
+		#'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample) #request QC data
 
 #Basecalling and assembly
 #########################################################
+rule basecall_staging:
+	input: lambda wildcards: fast5_basename_to_path[wildcards.fast5_basename]
+	output: '{sample}/0.basecall/data_links/{fast5_basename}/{fast5_basename}.fast5'
+	shell:
+		"ln -s {input} {output}"
 
 rule basecall:
 	#Call bases from raw fast5 data with guppy basecaller. Called once per input folder of fast5 files.
-	input: lambda wildcards: fast5_abspath_run_subfolder["/".join([wildcards.run, wildcards.subfolder])]
-	output: '{sample}/0.basecall/raw_calls/{run}/{subfolder}/sequencing_summary.txt'
+	input: "{sample}/0.basecall/data_links/{fast5_basename}/{fast5_basename}.fast5"
+	output: '{sample}/0.basecall/raw_calls/{fast5_basename}/sequencing_summary.txt'
 	threads: 4
 	resources:
-		time=2,
+		time=12,
 		mem=16
+	params:
+		in_dir = "{sample}/0.basecall/data_links/{fast5_basename}/",
+		out_dir = '{sample}/0.basecall/raw_calls/{fast5_basename}/'
 	singularity: singularity_image
 	shell:
-		"guppy_basecaller --cpu_threads_per_caller {threads} -i {input} -s {sample}/0.basecall/raw_calls/{wildcards.run}/{wildcards.subfolder}/ " +
+		"guppy_basecaller --cpu_threads_per_caller {threads} -i {params.in_dir} -s {params.out_dir} " +
 		"--flowcell {fc} --kit {k}" .format(fc=config['flowcell'], k = config['kit'])
 
 rule basecall_final:
 	#Collate called bases into a single fastq file
-	input: expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = fast5_abspath_run_subfolder.keys())
+	input: expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = [os.path.basename(f).split('.')[0] for f in fast5_files])
 	output: '{sample}/0.basecall/{sample}.fq'
 	shell:
-		"find {sample}/0.basecall/raw_calls/*/*/*.fastq | xargs cat > {output}"
+		"find {sample}/0.basecall/raw_calls/*/*.fastq | xargs cat > {output}"
 
 rule nanoplot:
 	#Run nanoplot on the collated .fq file containing basecalled reads. This produces helpful stats

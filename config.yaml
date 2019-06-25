@@ -1,8 +1,7 @@
 sample_name: 'sample'
 
 #data input
-fast5_parent_dir: 'path/to/parent/of/data/dirs'
-fast5_dirs_list: 'fodn.txt' #list of absolute paths to run/fast5/* subfolders containing .fast5 files
+fast5_directory: '/path/to/fast5/data/'
 flowcell: 'FLO-MIN106'
 kit: 'SQK-LSK109'
 
@@ -18,6 +17,3 @@ canu_args: 'cnsThreads=2 cnsMemory=32'
 usegrid: True #should Canu use the grid?
 grid_options: '--time=80:00:00 --account asbhatt'
 genome_size: '50m,100m'
-
-#do not change
-singularity: "shub://elimoss/lathe:longread"
