@@ -111,7 +111,7 @@ rule misassemblies_detect:
 		min_tig_size = 50000
 	resources:
 		mem=24,
-		time=6
+		time=24
 	singularity: "shub://elimoss/lathe:htsbox"
 	shell:
 		"""
@@ -275,7 +275,8 @@ checkpoint medaka_ranges:
 rule medaka_consensus:
 	input:
 		"{sample}/2.polish/medaka/ranges/{range}",
-		"{sample}/2.polish/racon/{sample}_racon_4.fa.bam"
+		"{sample}/2.polish/racon/{sample}_racon_4.fa.bam",
+		"{sample}/2.polish/racon/{sample}_racon_4.fa.bam.bai"
 	output:
 		"{sample}/2.polish/medaka/subruns/{range}_probs.hdf"
 	singularity: singularity_image
