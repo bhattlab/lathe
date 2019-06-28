@@ -175,8 +175,10 @@ rule merge:
 rule no_merge:
 	input: "{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.corrected.fasta".format(g = config['genome_size'])
 	output: "{sample}/1.assemble/{sample}_nomerge.fasta"
+	params:
+		asm = "assemble_{g}/{{sample}}_{g}.contigs.corrected.fasta".format(g = config['genome_size'])
 	shell:
-		"ln -s {input} {output}"
+		"ln -s {params.asm} {output}"
 
 def choose_merge():
 	if len(config['genome_size'].split(",")) == 1:
