@@ -1,7 +1,7 @@
 sample_name: 'sample'
 
 #data input
-fast5_directory: '/path/to/fast5/data/'
+fast5_directory: '/absolute/path/to/fast5/data/' #no relative paths!
 flowcell: 'FLO-MIN106'
 kit: 'SQK-LSK109'
 
