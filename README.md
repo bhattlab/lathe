@@ -52,6 +52,7 @@ For cluster Canu execution, please note: if set to True, you will need to instal
 To execute please run the following.  Please note, you must substitute a parent directory containing all of your data and working directories for `/labs/`.
 
 ```
-snakemake --use-singularity --singularity-args '--bind /labs/' -s /path/to/lathe/Snakefile --configfile path/to/modified_config.yaml --restart-times 0 --keep-going
+snakemake --use-singularity --singularity-args '--bind /labs/' -s /path/to/lathe/Snakefile \
+--configfile path/to/modified_config.yaml --restart-times 0 --keep-going --latency-wait 30
 # --profile scg #enable cluster support, highly recommended.  See above.
 ```
