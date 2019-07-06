@@ -6,17 +6,18 @@ flowcell: 'FLO-MIN106'
 kit: 'SQK-LSK109'
 
 #workflow steps to perform
+assembler: 'flye' #or canu
 min_contig_size: 0 #remove contigs smaller than this from the assembly (can speed up polishing but potentially hurt genome completeness)
 skip_circularization: False
 skip_polishing: False
 polish_both: False #should the input to short read polishing be the output of long read polishing?
 short_reads: '' #Comma-separated forward and reverse optionally gzipped fastq files.  Optional.  If no reads are given, the pilon step is skipped.
 
-#the below options are all related to Canu
+#the below options are all related to Canu. genome_size is used by Flye as well.
 canu_args: 'cnsThreads=2 cnsMemory=32'
 usegrid: True #should Canu use the grid?
 grid_options: '--time=80:00:00 --account asbhatt'
-genome_size: '50m,100m' #Estimated genome size. The default values work well for typical healthy human gut samples.
+genome_size: '100m,250m' #Estimated genome size. The default values work well for typical healthy human gut samples.
                         #A single value can be specified instead, which will perform only one assembly and bypass
                         #merging. This would be suitable for bacterial isolate data, small datasets or very simple
                         #metagenomes.

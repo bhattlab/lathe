@@ -26,7 +26,7 @@ for f in fast5_files:
 rule all:
 	input:
 		"{sample}/5.final/{sample}_final.fa".format(sample = sample), #request final output
-		#'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample) #request QC data
+		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample) #request QC data
 
 #Basecalling and assembly
 #########################################################
@@ -70,7 +70,7 @@ rule nanoplot:
 	singularity: "docker://quay.io/biocontainers/nanoplot:1.20.0--py35_0"
 	shell: "NanoPlot --fastq {input} -t {threads} --color green  -o " + "{s}/0.basecall/nanoplots".format(s = sample)
 
-rule assemble:
+rule assemble_canu:
 	#Run canu. This can be run either in distributed fashion on the cluster or in a single job. If run in distributed fashion (usedgrid is set to 'True')
 	#then canu must be installed in the user's environment. In this case, the singualarity image is not used. Canu arguments are passed through from
 	#the config within the 'canu_args' key. 'gridOptions' are also passed through from the config and instruct Canu on any additional parameters
@@ -78,7 +78,7 @@ rule assemble:
 	input: rules.basecall_final.output
 	output:
 		'{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.contigs.fasta',
-		'{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.correctedReads.fasta.gz'
+		#'{sample}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.correctedReads.fasta.gz'
 	threads: 1
 	resources:
 		mem=100,
@@ -93,6 +93,17 @@ rule assemble:
 			opts = config['grid_options']
 		)
 
+rule assemble_flye:
+	input: rules.basecall_final.output
+	output:
+		"{sample}/1.assemble/assemble_{genome_size}/assembly.fasta"
+	threads: 16
+	resources:
+		mem=100,
+		time=100
+	singularity: "docker://quay.io/biocontainers/flye:2.4.2--py27he860b03_0"
+	shell:
+		"flye -t {threads} --nano-raw {input} --meta -o {wildcards.sample}/1.assemble/assemble_{wildcards.genome_size}/ -g {wildcards.genome_size}"
 
 rule misassemblies_detect:
 	#Detect regions in the assembly which are not spanned by more than a single long read, indicating likely misassemblies.
@@ -101,8 +112,8 @@ rule misassemblies_detect:
 	#which span completely across the window. This approach is premised on misasssemblies causing clipped read alignments which can then be
 	#identified as alignments which do not span the misassembled locus.
 	input:
-		"{sample}/{sequence}.fa{sta}", #rules.assemble.output[0],
-		"{sample}/{sequence}.fa{sta}.fai", #rules.assemble.output[0] + '.fai',
+		"{sample}/{sequence}.fa{sta}",
+		"{sample}/{sequence}.fa{sta}.fai",
 		"{sample}/{sequence}.fa{sta}.bam",
 		"{sample}/{sequence}.fa{sta}.bam.bai"
 	output: "{sample}/{sequence}.fa{sta}.misassemblies.tsv" #"{sample}/1.assemble/assemble_{genome_size}/misassemblies/misassemblies.tsv"
@@ -160,10 +171,15 @@ rule misassemblies_correct:
 		rm {sample}/{wildcards.sequence}.tigs.toremove
 		"""
 
+def choose_assembler():
+	if config['assembler'] == 'canu':
+		return(expand('{{sample}}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.contigs.fasta', genome_size = config['genome_size'].split(",")))
+	elif config['assembler'] == 'flye':
+		return(expand("{{sample}}/1.assemble/assemble_{g}/assembly.corrected.fasta", g = config['genome_size'].split(",")))
 
 rule merge:
 	#Conservatively merge the two subassemblies
-	input: expand("{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.corrected.fasta", g = config['genome_size'].split(","))
+	input: choose_assembler()
 	output: "{sample}/1.assemble/{sample}_merged.fasta"
 	resources:
 		time=6,
@@ -416,7 +432,8 @@ def aggregate_pilon_subsetruns(wildcards):
 	checkpoint_output = checkpoints.pilon_ranges.get(**wildcards).output[0]
 	result = expand(rules.pilon_subsetrun.output,
 		sample=wildcards.sample,
-		range=glob_wildcards(os.path.join(checkpoint_output, '{range,tig.+}')).range)
+		range=glob_wildcards(os.path.join(checkpoint_output, '{range}'))[0]
+		)
 	return(result)
 
 rule pilon_aggregate_vcf:
@@ -482,7 +499,7 @@ rule polish_final:
 
 #Circularization
 #########################################################
-
+'''
 rule circularize_mapreads:
 	#Map long reads to polished assembly
 	input:
@@ -503,7 +520,7 @@ rule circularize_mapreads:
 		minimap2 {input} -ax map-ont -t {threads} | samtools sort --threads {threads} > {output[0]}
 		samtools index {output[0]}
 		"""
-
+'''
 checkpoint extract_bigtigs:
 	#Only genome-scale contigs are tested for circularity. This rule defines what size that is and extracts those contigs
 	#to individual fasta files.
@@ -525,8 +542,9 @@ checkpoint extract_bigtigs:
 rule circularize_bam2reads:
 	#Extracts reads mapping to the genome-scale contigs to be tested for circularity. These reads are reformatted to fastq and compressed.
 	input:
-		rules.circularize_mapreads.output,
-		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa"
+		rules.polish_final.output[0] + '.bam',
+		"{sample}/3.circularization/1.candidate_genomes/{tig}.fa",
+		rules.polish_final.output[0] + '.bam.bai',
 	output:
 		"{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}_terminal_reads.fq.gz"
 	singularity: singularity_image
