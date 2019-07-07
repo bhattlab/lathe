@@ -148,27 +148,32 @@ rule misassemblies_correct:
 	singularity: singularity_image
 	shell:
 		"""
-		cat {input[0]} | grep -v ^# | sort -k1,1 -k2,2g | join - <(cat {input[1]} | sort -k1,1 -k2,2g) | \
-		awk '{{
-		if ($1 == prev_tig){{
-		 print($1,prev_coord,$2)
-		 }}
-		else{{
-			if (prev_len > 0){{
-				print(prev_tig,prev_coord,prev_len)
+		if [ -s {input[0]} ] #if the input is nonempty...
+		then
+			cat {input[0]} | grep -v ^# | sort -k1,1 -k2,2g | join - <(cat {input[1]} | sort -k1,1 -k2,2g) | \
+			awk '{{
+			if ($1 == prev_tig){{
+			 print($1,prev_coord,$2)
+			 }}
+			else{{
+				if (prev_len > 0){{
+					print(prev_tig,prev_coord,prev_len)
+				}}
+				print($1,"1",$2)
+				}}
+			prev_tig = $1
+			prev_coord = $2
+			prev_len = $4
 			}}
-			print($1,"1",$2)
-			}}
-		prev_tig = $1
-		prev_coord = $2
-		prev_len = $4
-		}}
-		END {{ print(prev_tig,prev_coord,prev_len) }}' | sed "s/\(.*\) \(.*\)\ \(.*\)/\\1:\\2-\\3/g" |  xargs samtools faidx {input[2]} \
-		| cut -f1 -d ':' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output[0]}
+			END {{ print(prev_tig,prev_coord,prev_len) }}' | sed "s/\(.*\) \(.*\)\ \(.*\)/\\1:\\2-\\3/g" |  xargs samtools faidx {input[2]} \
+			| cut -f1 -d ':' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output[0]}
 
-		cut -f1 {input[0]} > {sample}/{wildcards.sequence}.tigs.toremove
-		grep -vf {sample}/{wildcards.sequence}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
-		rm {sample}/{wildcards.sequence}.tigs.toremove
+			cut -f1 {input[0]} > {sample}/{wildcards.sequence}.tigs.toremove
+			grep -vf {sample}/{wildcards.sequence}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
+			rm {sample}/{wildcards.sequence}.tigs.toremove
+		else
+			cp {input[2]} {output}
+		fi
 		"""
 
 def choose_assembler():
