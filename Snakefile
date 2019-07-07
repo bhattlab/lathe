@@ -432,7 +432,7 @@ def aggregate_pilon_subsetruns(wildcards):
 	checkpoint_output = checkpoints.pilon_ranges.get(**wildcards).output[0]
 	result = expand(rules.pilon_subsetrun.output,
 		sample=wildcards.sample,
-		range=glob_wildcards(os.path.join(checkpoint_output, '{range}'))[0]
+		range=glob_wildcards(os.path.join(checkpoint_output, '{range,[^.]*}'))[0]
 		)
 	return(result)
 
@@ -550,9 +550,9 @@ rule circularize_bam2reads:
 	singularity: singularity_image
 	shell:
 		"""
-		(samtools idxstats {sample}/3.circularization/0.aligned_corrected.bam | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", $2-50000, "-", $2; else print $1, ":", 1, "-", $2 }}' | tr -d ' ';
-		 samtools idxstats {sample}/3.circularization/0.aligned_corrected.bam | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", 1, "-", 50000; else print $1, ":", 1, "-", $2 }}' | tr -d ' ') |
-		xargs -I foo sh -c 'samtools view -h {sample}/3.circularization/0.aligned_corrected.bam foo | samtools fastq - || true' | bgzip > {output}
+		(samtools idxstats {input[0]} | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", $2-50000, "-", $2; else print $1, ":", 1, "-", $2 }}' | tr -d ' ';
+		 samtools idxstats {input[0]} | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", 1, "-", 50000; else print $1, ":", 1, "-", $2 }}' | tr -d ' ') |
+		xargs -I foo sh -c 'samtools view -h {input[0]} foo | samtools fastq - || true' | bgzip > {output}
 		"""
 
 rule circularize_assemble:
