@@ -272,7 +272,7 @@ rule racon:
 	output:
 		'{sample}/2.polish/racon/{sample}_racon_{iteration}.fa'
 	threads: 16
-	singularity: singularity_image
+	singularity: "docker://quay.io/biocontainers/racon:1.3.2--he941832_0"
 	resources:
 		mem=48,
 		time=8
@@ -568,7 +568,7 @@ rule circularize_assemble:
 	output: "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}.contigs.fasta"
 	params:
 		directory="{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}",
-	singularity: singularity_image
+	singularity: singularity_image #"docker://quay.io/biocontainers/flye:2.4.2--py27he860b03_0"
 	resources:
 		time=12,
 		mem=50
@@ -578,6 +578,8 @@ rule circularize_assemble:
 		canu -useGrid=False -assemble -p {wildcards.tig} -d {params.directory}  \
 		-nanopore-corrected {input} genomeSize=100000
 		"""
+#could also use flye for this
+#flye -t {threads} --nano-raw {input} -o {params.directory} -g 1m
 
 rule circularize_spantig_pre:
 	#Prepare to determine if the contig assembled in circularize_assemble actually spans the two ends of the putative genome contig.
