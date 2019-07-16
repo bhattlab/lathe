@@ -21,7 +21,7 @@ os.system("nucmer -p {delta} -b 4000 -l 2000 --maxmatch {fa} {fa}".format( #-t {
 	delta = snakemake.params['delta'],
 	fa = fastaf
 ))
-os.system("show-coords -T {delta} -L 2000 | sed '1,5d' > coords.tsv".format(
+os.system("show-coords -T {delta}.delta -L 2000 | sed '1,5d' > coords.tsv".format(
 	delta = snakemake.params['delta']
 )) #the 1,5d gets rid of the header and identity hit as well
 print("Trimming genome...")

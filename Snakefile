@@ -271,11 +271,11 @@ rule racon:
 		get_racon_input
 	output:
 		'{sample}/2.polish/racon/{sample}_racon_{iteration}.fa'
-	threads: 16
+	threads: 12
 	singularity: "docker://quay.io/biocontainers/racon:1.3.2--he941832_0"
 	resources:
 		mem=48,
-		time=8
+		time=24
 	shell:
 		"""
 		racon -m 8 -x -6 -g -8 -w 500 -t {threads} {input} > {output}
@@ -346,9 +346,11 @@ def aggregate_medaka_subsetruns(wildcards):
 rule medaka_aggregate:
 	input: aggregate_medaka_subsetruns
 	output: "{sample}/2.polish/medaka/{sample}_medaka.fa"
+	params:
+		indir = "{sample}/2.polish/medaka/sub_fa/*"
 	shell:
 		"""
-		cat {input} | cut -f1 -d ':' > {output}
+		cat {params.indir} | cut -f1 -d ':' > {output}
 		"""
 
 rule align_short_reads:
@@ -397,6 +399,7 @@ rule pilon_subsetrun:
 	resources:
 		time=4,
 		mem=32
+	#group: "pilon_subsetruns" #this causes problems with slurm integration
 	singularity: singularity_image
 	params:
 		java_mem = 30,
@@ -424,9 +427,9 @@ rule pilon_subsetrun:
 		samtools index {params.bam}
 		samtools faidx {input[0]} $(echo {wildcards.range}| cut -f1 -d ':') | cut -f1 -d ':' > {params.fa}
 		java -Xmx{params.java_mem}G -jar $(which pilon | sed 's/\/pilon//g')/../share/pilon*/pilon*.jar \
-			--genome {params.fa} \
+			--genome {params.fa} --targets {wildcards.range} \
 			--unpaired {params.bam} --output {sample}_{wildcards.range} --outdir {params.subrun_folder} \
-			--vcf --nostrays --mindepth 3
+			--vcf --nostrays --mindepth 1
 		bgzip {params.subrun_folder}/{sample}_{wildcards.range}.vcf
 		tabix -fp vcf {params.subrun_folder}/{sample}_{wildcards.range}.vcf.gz
 		"""
@@ -496,7 +499,7 @@ rule polish_final:
 	#Generate the final output of the polishing phase, whether that's with short reads, long reads, both or neither.
 	#Colons and any following characters are omitted from contig names.
 	input: choose_polish
-	output: "{sample}/2.polish/{sample}_polished.fa"
+	output: "{sample}/2.polish/{sample}_polished.fasta"
 	shell:
 		"""
 		cut -f1 -d ':' {input} > {output}
@@ -504,28 +507,6 @@ rule polish_final:
 
 #Circularization
 #########################################################
-'''
-rule circularize_mapreads:
-	#Map long reads to polished assembly
-	input:
-		rules.polish_final.output,
-		'{sample}/1.assemble/assemble_{g}/{sample}_{g}.correctedReads.fasta.gz'.format(
-			g = config['genome_size'].split(",")[0],
-			sample = sample)
-	output:
-		"{sample}/3.circularization/0.aligned_corrected.bam",
-		"{sample}/3.circularization/0.aligned_corrected.bam.bai",
-	threads: 8
-	resources:
-		time=6,
-		mem=32
-	singularity: singularity_image
-	shell:
-		"""
-		minimap2 {input} -ax map-ont -t {threads} | samtools sort --threads {threads} > {output[0]}
-		samtools index {output[0]}
-		"""
-'''
 checkpoint extract_bigtigs:
 	#Only genome-scale contigs are tested for circularity. This rule defines what size that is and extracts those contigs
 	#to individual fasta files.
@@ -557,7 +538,7 @@ rule circularize_bam2reads:
 		"""
 		(samtools idxstats {input[0]} | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", $2-50000, "-", $2; else print $1, ":", 1, "-", $2 }}' | tr -d ' ';
 		 samtools idxstats {input[0]} | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", 1, "-", 50000; else print $1, ":", 1, "-", $2 }}' | tr -d ' ') |
-		xargs -I foo sh -c 'samtools view -h {input[0]} foo | samtools fastq - || true' | bgzip > {output}
+		xargs -I foo sh -c 'samtools view -h {input[0]} foo | samtools fastq - || true' | paste - - - - | sort | uniq | tr '\t' '\n' | bgzip > {output}
 		"""
 
 rule circularize_assemble:
@@ -565,21 +546,23 @@ rule circularize_assemble:
 	#ends of a circular genome contig
 	input:
 		rules.circularize_bam2reads.output
-	output: "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}.contigs.fasta"
+	output: "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/assembly.fasta"
 	params:
 		directory="{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}",
-	singularity: singularity_image #"docker://quay.io/biocontainers/flye:2.4.2--py27he860b03_0"
+	singularity: "docker://quay.io/biocontainers/flye:2.4.2--py27he860b03_0"
 	resources:
-		time=12,
-		mem=50
-	threads: 8
+		time=4,
+		mem=32
+	threads: 4
 	shell:
 		"""
-		canu -useGrid=False -assemble -p {wildcards.tig} -d {params.directory}  \
-		-nanopore-corrected {input} genomeSize=100000
+		flye -t {threads} --nano-raw {input} -o {params.directory} -g 1m
 		"""
-#could also use flye for this
-#flye -t {threads} --nano-raw {input} -o {params.directory} -g 1m
+		#needed for canu:
+		#canu -useGrid=False -assemble -p {wildcards.tig} -d {params.directory}  \
+		#-nanopore-corrected {input} genomeSize=100000
+		#{tig}.contigs
+		#singularity_image #
 
 rule circularize_spantig_pre:
 	#Prepare to determine if the contig assembled in circularize_assemble actually spans the two ends of the putative genome contig.
@@ -720,12 +703,12 @@ rule circularize_final:
 	singularity: singularity_image
 	shell:
 		"""
-		cat {sample}/3.circularization/3.circular_sequences/sh/* | bash
-		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1 -d '_' > circs.tmp || true
+		find {sample}/3.circularization/3.circular_sequences/sh/ -type f | xargs cat | bash
+		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1-2 -d '_' > circs.tmp || true
 		(cat {input[1]} | grep -vf circs.tmp |
-		cut -f1 | xargs samtools faidx {input[0]}; ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | xargs cat) |
+		cut -f1 | xargs samtools faidx {input[0]}; ls {sample}/3.circularization/3.circular_sequences/* | grep .fa$ | xargs cat) |
 		sed 's/\([ACTG]\)\\n/\1/g' | fold -w 120 | cut -f1 -d ':' > {output} || true
-		#rm circs.tmp
+		rm circs.tmp
 		"""
 
 #Misassembly detection
