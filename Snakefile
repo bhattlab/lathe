@@ -672,7 +672,7 @@ rule circularize_overcirc_trim:
 		span_out = open(input[0], 'r').readlines()
 		cmd = ''
 		if span_out == ['done\n']: #no circularization occurred
-			print('Nothing to do')
+			print('No over-circularization')
 		else:
 			trim = span_out[0].strip()
 			trim_cmd = 'samtools faidx ' + input[1] + ' ' + trim + " > " + params.outfa + "\n"
@@ -707,7 +707,7 @@ rule circularize_final:
 		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1-2 -d '_' > circs.tmp || true
 		(cat {input[1]} | grep -vf circs.tmp |
 		cut -f1 | xargs samtools faidx {input[0]}; ls {sample}/3.circularization/3.circular_sequences/* | grep .fa$ | xargs cat) |
-		sed 's/\([ACTG]\)\\n/\1/g' | fold -w 120 | cut -f1 -d ':' > {output} || true
+		tr -d '\\n' | sed 's/\\(>contig_[0-9]*\\)/\\n\\1\\n/g' | fold -w 120 | cut -f1 -d ':' | grep -v '^$' > {output} || true
 		rm circs.tmp
 		"""
 
