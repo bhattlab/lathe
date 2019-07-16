@@ -707,7 +707,7 @@ rule circularize_final:
 		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1-2 -d '_' > circs.tmp || true
 		(cat {input[1]} | grep -vf circs.tmp |
 		cut -f1 | xargs samtools faidx {input[0]}; ls {sample}/3.circularization/3.circular_sequences/* | grep .fa$ | xargs cat) |
-		tr -d '\\n' | sed 's/\\(>contig_[0-9]*\\)/\\n\\1\\n/g' | fold -w 120 | cut -f1 -d ':' | grep -v '^$' > {output} || true
+		tr -d '\\n' | sed 's/\\(>contig[_0-9]*\\)/\\n\\1\\n/g' | fold -w 120 | cut -f1 -d ':' | grep -v '^$' > {output} || true
 		rm circs.tmp
 		"""
 
