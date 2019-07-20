@@ -152,25 +152,26 @@ rule misassemblies_correct:
 		then
 			cat {input[0]} | grep -v ^# | sort -k1,1 -k2,2g | join - <(cat {input[1]} | sort -k1,1 -k2,2g) | \
 			awk '{{
-			if ($1 == prev_tig){{
-			 print($1,prev_coord,$2)
-			 }}
-			else{{
-				if (prev_len > 0){{
-					print(prev_tig,prev_coord,prev_len)
+				if ($1 == prev_tig){{
+				 print($1,prev_coord,$2)
+				 }}
+				else{{
+					if (prev_len > 0){{
+						print(prev_tig,prev_coord,prev_len)
+					}}
+					print($1,"1",$2)
+					}}
+				prev_tig = $1
+				prev_coord = $2
+				prev_len = $4
 				}}
-				print($1,"1",$2)
-				}}
-			prev_tig = $1
-			prev_coord = $2
-			prev_len = $4
-			}}
-			END {{ print(prev_tig,prev_coord,prev_len) }}' | sed "s/\(.*\) \(.*\)\ \(.*\)/\\1:\\2-\\3/g" |  xargs samtools faidx {input[2]} \
+				END {{ print(prev_tig,prev_coord,prev_len)
+			}}' | sed "s/\(.*\) \(.*\)\ \(.*\)/\\1:\\2-\\3/g" |  xargs samtools faidx {input[2]} \
 			| cut -f1 -d ':' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output[0]}
 
-			cut -f1 {input[0]} > {sample}/{wildcards.sequence}.tigs.toremove
-			grep -vf {sample}/{wildcards.sequence}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
-			rm {sample}/{wildcards.sequence}.tigs.toremove
+			#cut -f1 {input[0]} > {sample}/{wildcards.sequence}.tigs.toremove
+			#grep -vf {sample}/{wildcards.sequence}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
+			#rm {sample}/{wildcards.sequence}.tigs.toremove
 		else
 			cp {input[2]} {output}
 		fi
@@ -194,7 +195,7 @@ rule merge:
 		"merge_wrapper.py {input} -ml 10000 -c 5 -hco 10; mv merged_out.fasta {output}"
 
 rule no_merge:
-	input: "{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.corrected.fasta".format(g = config['genome_size'])
+	input: choose_assembler() # "{{sample}}/1.assemble/assemble_{g}/{{sample}}_{g}.contigs.corrected.fasta".format(g = config['genome_size'])
 	output: "{sample}/1.assemble/{sample}_nomerge.fasta"
 	params:
 		asm = "assemble_{g}/{{sample}}_{g}.contigs.corrected.fasta".format(g = config['genome_size'])
