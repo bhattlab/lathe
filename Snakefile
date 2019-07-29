@@ -16,7 +16,7 @@ singularity_image = "shub://elimoss/lathe:longread"
 #extract samplename from config
 sample = config['sample_name']
 
-#find fast5 files. These are expected to be below the directory provided in the config. All fast5's in this directory will be processed.
+#find fast5 files. These are expected to be below the directory provided in the config. All fast5's below this directory will be processed.
 fast5_files = glob.glob(os.path.join(config['fast5_directory'], '**', '*.fast5'), recursive=True) #list provided directory recursively
 #create a dictionary which relates fast5 basenames to the full path of each file
 fast5_basename_to_path = {}
@@ -706,7 +706,7 @@ rule circularize_final:
 		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1-2 -d '_' > circs.tmp || true
 		(cat {input[1]} | grep -vf circs.tmp |
 		cut -f1 | xargs samtools faidx {input[0]}; ls {sample}/3.circularization/3.circular_sequences/* | grep .fa$ | xargs cat) |
-		tr -d '\\n' | sed 's/\\(>contig[_0-9]*\\)/\\n\\1\\n/g' | fold -w 120 | cut -f1 -d ':' | grep -v '^$' > {output} || true
+		tr -d '\\n' | sed 's/\\(>[contigscaffold]*[_0-9]*\\)/\\n\\1\\n/g' | fold -w 120 | cut -f1 -d ':' | grep -v '^$' > {output} || true
 		rm circs.tmp
 		"""
 
