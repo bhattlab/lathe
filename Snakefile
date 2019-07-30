@@ -28,16 +28,16 @@ for f in fast5_files:
 #perform a check on the Lathe git repo and exit if not up to date
 onstart:
 	import git
-	print("Checking git status")
+	print("Checking for updates or modifications")
 	repo_dir = os.path.dirname(workflow.snakefile)
 	print(repo_dir)
 	repo = git.Repo(repo_dir)
 	assert not repo.bare
-	git = repo.git
-	stat = git.status()
-	print(stat)
-	if stat.split("\n")[1] == '# Changes not staged for commit:':
-		print("Warning: unstaged changes to workflow detected")
+	repo_git = repo.git
+	stat = repo_git.diff('origin/master')
+	print([stat])
+	if stat != "":
+		print('WARNING: Differences to latest version detected. Please reset changes and/or pull repo.')
 	#elif stat.split("\n")[1]
 	sys.exit("Test complete")
 
