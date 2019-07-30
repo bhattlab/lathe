@@ -25,22 +25,19 @@ fast5_basename_to_path = {}
 for f in fast5_files:
 	fast5_basename_to_path[os.path.splitext(os.path.basename(f))[0]] = f
 
-#perform a check on the Lathe git repo and exit if not up to date
+#perform a check on the Lathe git repo and warn if not up to date
 onstart:
 	import git
-	print("Checking for updates or modifications")
+	print("Checking for updates or modifications to workflow")
 	repo_dir = os.path.dirname(workflow.snakefile)
-	print(repo_dir)
 	repo = git.Repo(repo_dir)
 	assert not repo.bare
 	repo_git = repo.git
 	stat = repo_git.diff('origin/master')
-	print([stat])
 	if stat != "":
 		print('WARNING: Differences to latest version detected. Please reset changes and/or pull repo.')
-	#elif stat.split("\n")[1]
-	sys.exit("Test complete")
-
+	else:
+		print("No updates or modifications found")
 
 rule all:
 	input:
