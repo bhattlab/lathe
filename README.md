@@ -47,7 +47,7 @@ Instructions to enable cluster execution with SLURM can be found at https://gith
  * **skip_circularization**: Should circularization be omitted from the workflow?
 
 
-For cluster Canu execution, please note: if set to True, you will need to install Canu, e.g. `conda install -c conda-forge -c bioconda Canu=1.8` as well as provide any additional required parameters for your job scheduler in the config.yaml file.  Please see the example config file. When executing on a cluster, Canu will appear to fail, as the first process does not produce an assembly and instead spawns subsequent jobs on the cluster.  Don't worry, just re-run Lathe when the assembly completes.
+Lathe uses the Flye assembler by default. For Canu, please specify 'canu' for the assembler parameter in the config. For cluster Canu execution, please note: if set to True, you will need to install Canu, e.g. `conda install -c conda-forge -c bioconda Canu=1.8` as well as provide any additional required parameters for your job scheduler in the config.yaml file.  Please see the example config file. When executing on a cluster, Canu will appear to fail, as the first process does not produce an assembly and instead spawns subsequent jobs on the cluster.  Don't worry, just re-run Lathe when the assembly completes.
 
 To execute please run the following.  Please note, you must substitute a parent directory containing all of your data and working directories for `/labs/`.
 
