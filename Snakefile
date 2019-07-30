@@ -7,6 +7,8 @@ Author: Eli Moss
 import os
 import glob
 from pathlib import Path
+import git
+import snakemake
 
 localrules: no_merge, basecall_staging, pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
 
@@ -22,6 +24,23 @@ fast5_files = glob.glob(os.path.join(config['fast5_directory'], '**', '*.fast5')
 fast5_basename_to_path = {}
 for f in fast5_files:
 	fast5_basename_to_path[os.path.splitext(os.path.basename(f))[0]] = f
+
+#perform a check on the Lathe git repo and exit if not up to date
+onstart:
+	import git
+	print("Checking git status")
+	repo_dir = os.path.dirname(workflow.snakefile)
+	print(repo_dir)
+	repo = git.Repo(repo_dir)
+	assert not repo.bare
+	git = repo.git
+	stat = git.status()
+	print(stat)
+	if stat.split("\n")[1] == '# Changes not staged for commit:':
+		print("Warning: unstaged changes to workflow detected")
+	#elif stat.split("\n")[1]
+	sys.exit("Test complete")
+
 
 rule all:
 	input:
