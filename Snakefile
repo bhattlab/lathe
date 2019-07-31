@@ -185,9 +185,9 @@ rule misassemblies_correct:
 			}}' | sed "s/\(.*\) \(.*\)\ \(.*\)/\\1:\\2-\\3/g" |  xargs samtools faidx {input[2]} \
 			| cut -f1 -d ':' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output[0]}
 
-			#cut -f1 {input[0]} > {sample}/{wildcards.sequence}.tigs.toremove
-			#grep -vf {sample}/{wildcards.sequence}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
-			#rm {sample}/{wildcards.sequence}.tigs.toremove
+			cut -f1 {input[0]} > {sample}/{wildcards.sequence}.tigs.toremove
+			grep -vf {sample}/{wildcards.sequence}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
+			rm {sample}/{wildcards.sequence}.tigs.toremove
 		else
 			cp {input[2]} {output}
 		fi
