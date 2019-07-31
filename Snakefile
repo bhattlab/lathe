@@ -195,7 +195,7 @@ rule misassemblies_correct:
 
 def choose_assembler():
 	if config['assembler'] == 'canu':
-		return(expand('{{sample}}/1.assemble/assemble_{genome_size}/{sample}_{genome_size}.contigs.fasta', genome_size = config['genome_size'].split(",")))
+		return(expand('{{sample}}/1.assemble/assemble_{genome_size}/{{sample}}_{genome_size}.contigs.fasta', genome_size = config['genome_size'].split(",")))
 	elif config['assembler'] == 'flye':
 		return(expand("{{sample}}/1.assemble/assemble_{g}/assembly.corrected.fasta", g = config['genome_size'].split(",")))
 
