@@ -10,7 +10,7 @@ from pathlib import Path
 import git
 import snakemake
 
-localrules: no_merge, basecall_staging, pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
+localrules: no_merge, basecall_staging, pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final, final, quast_final
 
 #set up singularity image used for the bulk of rules
 singularity_image = "shub://elimoss/lathe:longread"
@@ -42,6 +42,7 @@ onstart:
 rule all:
 	input:
 		"{sample}/5.final/{sample}_final.fa".format(sample = sample), #request final output
+		"{sample}/5.final/quast/report.html".format(sample = sample), #request final output
 		'{sample}/0.basecall/nanoplots/Weighted_LogTransformed_HistogramReadlength.png'.format(sample = sample) #request QC data
 
 #Basecalling and assembly
@@ -142,13 +143,13 @@ rule misassemblies_detect:
 	singularity: "shub://elimoss/lathe:htsbox"
 	shell:
 		"""
-	    bedtools makewindows -g {input[1]} -w {params.window_width} | join - {input[1]} | tr ' ' '\t' | \
-	    cut -f1-4 | awk '{{if ($2 > {params.window_width} && $3 < $4 - {params.window_width} && $4 > {params.min_tig_size}) print $0}}' | \
-	    xargs -P 16 -l bash -c '
-	     htsbox samview {input[2]} $0:$1-$1 -p | \
-	     cut -f8,9 | awk "{{if (\$1 < $1 - ({params.window_width}/2) && \$2 > $1 + ({params.window_width}/2)) print \$0}}" | wc -l | \
-	     paste <(echo $0) <(echo $1) - ' | awk '{{if ($3 < 2) print $0}}
-	    ' > {output}
+		bedtools makewindows -g {input[1]} -w {params.window_width} | join - {input[1]} | tr ' ' '\t' | \
+		cut -f1-4 | awk '{{if ($2 > {params.window_width} && $3 < $4 - {params.window_width} && $4 > {params.min_tig_size}) print $0}}' | \
+		xargs -P 16 -l bash -c '
+		 htsbox samview {input[2]} $0:$1-$1 -p | \
+		 cut -f8,9 | awk "{{if (\$1 < $1 - ({params.window_width}/2) && \$2 > $1 + ({params.window_width}/2)) print \$0}}" | wc -l | \
+		 paste <(echo $0) <(echo $1) - ' | awk '{{if ($3 < 2) print $0}}
+		' > {output}
 		"""
 
 rule misassemblies_correct:
@@ -425,16 +426,16 @@ rule pilon_subsetrun:
 	shell:
 		"""
 		# set env var $i to be the smallest read subset decimal (in increments of 0.1, with a couple very low values thrown in, too)
-    	# sufficient to generate at least 40x coverage depth of the target sequence, or
+		# sufficient to generate at least 40x coverage depth of the target sequence, or
 		# 1 if 40x coverage cannot be achieved with the available read data
 
 		for i in 0.01 0.05 $(seq 0.1 0.1 1);
 		do
-		   cov=$(samtools view {input[1]} -s $i -h {wildcards.range} | samtools depth - | cut -f3 | awk '{{sum+=$1}}END{{print sum/(NR+1)}}')
-		   if [ $(echo $cov'>'{params.target_coverage}|bc) -eq 1 ]
-		   then
-		       break
-		   fi
+			cov=$(samtools view {input[1]} -s $i -h {wildcards.range} | samtools depth - | cut -f3 | awk '{{sum+=$1}}END{{print sum/(NR+1)}}')
+			if [ $(echo $cov'>'{params.target_coverage}|bc) -eq 1 ]
+			then
+				break
+			fi
 		done
 		echo Using $i x of total coverage;
 
@@ -453,7 +454,7 @@ def aggregate_pilon_subsetruns(wildcards):
 	#The individually polished sub-regions of the overall assembly must be collected into a consensus assembly. This rule
 	#gathers all the outputs that have been generated for input into the aggregation rule.
 	checkpoint_output = checkpoints.pilon_ranges.get(**wildcards).output[0]
-	result = expand(rules.pilon_subsetrun.output,
+	result = expand('{sample}/2.polish/pilon/sub_runs/{range}/{sample}_{range}.vcf.gz',
 		sample=wildcards.sample,
 		range=glob_wildcards(os.path.join(checkpoint_output, '{range,[^.]*}'))[0]
 		)
@@ -465,7 +466,7 @@ rule pilon_aggregate_vcf:
 	#consensus sequence generation doesn't trip up, this VCF must be carefully deduplicated and sorted before
 	#being compressed and indexed.
 	input:
-		aggregate_pilon_subsetruns
+		lambda wildcards: aggregate_pilon_subsetruns(wildcards)
 	output:
 		'{sample}/2.polish/pilon/corrections.vcf.gz'
 	resources:
@@ -652,7 +653,7 @@ rule circularize_span_trim:
 def aggregate_span_trim(wildcards):
 	#Collect the genome sequences produced by spanning contig circularization
 	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output[0]
-	result = expand(rules.circularize_span_trim.output, #"{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_trim.sh",
+	result = expand("{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_trim.sh",
 		sample=wildcards.sample,
 		tig=glob_wildcards(os.path.join(checkpoint_output, '{tig}.fa')).tig)
 	return(result)
@@ -698,7 +699,7 @@ rule circularize_overcirc_trim:
 def aggregate_overcirc_trim(wildcards):
 	#Collect the circular genome sequences obtained by overcircularization detection.
 	checkpoint_output = checkpoints.extract_bigtigs.get(**wildcards).output[0]
-	result = expand(rules.circularize_overcirc_trim.output, #"{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_overcirc.sh",
+	result = expand("{sample}/3.circularization/3.circular_sequences/sh/{tig}_span_overcirc.sh",
 		sample=wildcards.sample,
 		tig=glob_wildcards(os.path.join(checkpoint_output, '{tig}.fa')).tig)
 	return(result)
@@ -722,7 +723,7 @@ rule circularize_final:
 		ls {sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1-2 -d '_' > circs.tmp || true
 		(cat {input[1]} | grep -vf circs.tmp |
 		cut -f1 | xargs samtools faidx {input[0]}; ls {sample}/3.circularization/3.circular_sequences/* | grep .fa$ | xargs cat) |
-		tr -d '\\n' | sed 's/\\(>[contigscaffold_]*[0-9]*\\)/\\n\\1\\n/g' | fold -w 120 | cut -f1 -d ':' | grep -v '^$' > {output} || true
+		tr -d '\\n' | sed 's/\\(>[contigscaffold_]*[0-9]*[\\._]*[0-9]*\\)/\\n\\1\\n/g' | fold -w 120 | cut -f1 -d ':' | grep -v '^$' > {output} || true
 		rm circs.tmp
 		"""
 
@@ -741,6 +742,20 @@ rule final:
 	input: skip_circularization_or_not()[0].replace('.fasta', '.corrected.fasta') #perform one last round of misassembly breakage
 	output: "{sample}/5.final/{sample}_final.fa"
 	shell: "cp {input} {output}"
+
+rule quast_final:
+	input:
+		rules.final.output
+	output:
+		"{sample}/5.final/quast/report.html"
+	params:
+		outdir = "{sample}/5.final/quast/"
+	threads: 1
+	singularity: "docker://quay.io/biocontainers/quast:5.0.2--py27pl526ha92aebf_0"
+	shell: """
+		quast -o {params.outdir} {input} --threads {threads}
+		"""
+
 
 #Utility functions
 #########################################################
