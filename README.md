@@ -52,7 +52,7 @@ Lathe uses the Flye assembler by default. For Canu, please specify 'canu' for th
 To execute please run the following.  Please note, you must substitute a parent directory containing all of your data and working directories for `/labs/`.
 
 ```
-snakemake --use-singularity --singularity-args '--bind /labs/ --bind /scratch/ --bind /scg/ ' -s /path/to/lathe/Snakefile \
+snakemake --use-singularity --singularity-args '--bind /labs/,/scg/,/home/ ' -s /path/to/lathe/Snakefile \
 --configfile path/to/modified_config.yaml --restart-times 0 --keep-going --latency-wait 30
 # --profile scg #enable cluster support, highly recommended.  See above.
 ```
