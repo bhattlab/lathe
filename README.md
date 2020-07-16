@@ -19,7 +19,9 @@ Next, clone this github directory to some location where it can be stored perman
 git clone https://github.com/elimoss/lathe.git
 ```
 
-Instructions to enable cluster execution with SLURM can be found at https://github.com/bhattlab/slurm
+Instructions to enable cluster execution with SLURM can be found at https://github.com/bhattlab/slurm .
+
+Typical installation time: 5-10 minutes. 
 
 
 ## Inputs
