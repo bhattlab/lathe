@@ -28,7 +28,7 @@ Typical installation time: 5-10 minutes.
 ### Alter config.yaml to provide the following:
  * **sample_name**: Name of sample and output directory
 
- * **fast5_dirs_list**: text file containing a list of absolute paths to run/fast5/* subfolders containing .fast5 files.  A good way to generate this is with `find -maxdepth 2 -mindepth 2 fast5_parent_dir > fodn.txt`
+ * **fast5_directory**: the absolute path to fast5 data
 
  * **flowcell**: flowcell code, e.g. FLO-MIN106, passed to basecaller
 
