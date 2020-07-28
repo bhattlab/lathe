@@ -1,0 +1,23 @@
+sample_name: 'atcc_tutorial'
+
+#data input
+fast5_directory: 'na' # data are already basecalled and found in the 0.basecall directory
+flowcell: 'FLO-MIN106'
+kit: 'SQK-LSK109'
+
+#workflow steps to perform
+assembler: 'flye' 
+min_contig_size: 0 
+skip_circularization: True
+skip_polishing: False
+polish_both: False 
+short_reads: '/path/to/tutorial/inputdata/atcc_100000_sr.fastq' 
+
+#the below options are all related to Canu. genome_size is used by Flye as well.
+canu_args: 'cnsThreads=2 cnsMemory=32'
+usegrid: True #should Canu use the grid?
+grid_options: '--time=80:00:00 --account asbhatt'
+genome_size: '100m,250m' #Estimated genome size. The default values work well for typical healthy human gut samples.
+                        #A single value can be specified instead, which will perform only one assembly and bypass
+                        #merging. This would be suitable for bacterial isolate data, small datasets or very simple
+                        #metagenomes.
