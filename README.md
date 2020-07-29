@@ -108,7 +108,7 @@ samplename/
 
 ## Tutorial
 
-The tutorial can be run using the provided config file and input data within the tutorial folder. To run the tutorial:
+The tutorial can be run using the provided config file and input data within the tutorial folder. This tutorial uses pre-basecalled long read data (to reduce total file sizes) and performs assembly with Flye and short read polishing. To reduce runtime, this tutorial skips basecalling, long read polishing, and circularization steps. With cluster execution enabled, this tutorial should be completed in under 6 hours. Successful completion will be indicated by the presence of a atcc_tutorial_final.fa file in the 5.final directory. To run the tutorial:
  * unzip the short read (tutorial/inputdata/atcc_100000_sr.fastq.gz) and long read (tutorial/atcc_tutorial/0.basecall/atcc_tutorial.fq.gz) data
 
  * edit the config file to provide the absolute path to the short read input data (atcc_100000_sr.fastq)
