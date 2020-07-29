@@ -104,3 +104,19 @@ samplename/
     ├── samplename_final.fa
     └── samplename_final.fa.fai
 ```
+
+
+## Tutorial
+
+The tutorial can be run using the provided config file and input data within the tutorial folder. To run the tutorial:
+ * unzip the short read (tutorial/inputdata/atcc_100000_sr.fastq.gz) and long read (tutorial/atcc_tutorial/0.basecall/atcc_tutorial.fq.gz) data
+
+ * edit the config file to provide the absolute path to the short read input data (atcc_100000_sr.fastq)
+ 
+ * run Lathe using the command:
+ 
+ ```
+snakemake --use-singularity --singularity-args '--bind /yourrootdirectories/ ' -s /path/to/lathe/Snakefile \
+--configfile path/to/config_nobasecalling.yaml --restart-times 0 --keep-going --latency-wait 30
+# --profile clusterconfiguration #enable cluster support, highly recommended.  See above.
+```
