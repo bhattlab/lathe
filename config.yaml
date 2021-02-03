@@ -1,7 +1,13 @@
-sample_name: 'sample'
-
-#data input
-fast5_directory: '/absolute/path/to/fast5/data/' #no relative paths!
+# data input
+# file_names_txt is a 2 or 3 column tsv with the following columns
+# SAMPLE_NAME     FAST5/FASTQ_READS      SHORT_READS_1,SHORT_READS_2
+# sample name in the first column will be used to name ouptut
+# the second column can be a directory containing fast5 files (the output of a nanopore run)
+#   -OR- a single fastq file containing basecalled data 
+# Optionally, a short read sequencing dataset can be provided in the third column, 
+#   with pairs separated by a comma. If this option is selected, short read
+#   polishing will be turned on. 
+file_names_txt: 'sample_reads.txt'
 flowcell: 'FLO-MIN106'
 kit: 'SQK-LSK109'
 

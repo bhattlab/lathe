@@ -23,12 +23,23 @@ Instructions to enable cluster execution with SLURM can be found at https://gith
 
 Typical installation time: 5-10 minutes. 
 
+## Change as of 2021-02-03
+Lathe has been adapted to run on multiple samples simultaneously, instead of one sample per snakemake command. The pipeline can now take in either .fast5 raw data from a nanopore run, or basecalled fastq files. The config file has been changed to reflect this. You now provide sample information and datasets in a tab-delimited file, and indicate this file in the `config.yaml`. Provide this file to the `file_names_txt` argument in the configfile. 
+```
+file_names_txt is a 2 or 3 column tsv with the following columns
+SAMPLE_NAME     FAST5/FASTQ_READS      SHORT_READS_1,SHORT_READS_2
+sample name in the first column will be used to name ouptut
+the second column can be a directory containing fast5 files (the output of a nanopore run)
+  -OR- a single fastq file containing basecalled data 
+Optionally, a short read sequencing dataset can be provided in the third column, 
+  with pairs separated by a comma. If this option is selected, short read
+  polishing will be turned on. 
+```
+
 
 ## Inputs
 ### Alter config.yaml to provide the following:
- * **sample_name**: Name of sample and output directory
-
- * **fast5_directory**: the absolute path to fast5 data
+ * **file_names_txt**: Tab delimited file describing sample names and input datasets. See config.yaml for a description.
 
  * **flowcell**: flowcell code, e.g. FLO-MIN106, passed to basecaller
 
@@ -37,8 +48,6 @@ Typical installation time: 5-10 minutes.
  * **genome_size**: Estimated genome size, e.g. 50m, passed to Canu.
 
  * **singularity**: location (including on the internet) of a singularity image to be used for the workflow.  Don't change this.
-
- * **short_reads**: location of short reads to be used for Pilon polishing, or empty quotes for long-read polishing.
 
  * **use_grid**: should Canu execute in distributed mode on a cluster?
 
