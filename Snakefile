@@ -1,7 +1,7 @@
 '''
 Long read assembly and post-processing workflow for assembling genomes from metagenomes.
 
-Author: Eli Moss
+Authors: Eli Moss and Benjamin Siranosian
 '''
 
 import os
