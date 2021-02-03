@@ -18,6 +18,7 @@ localrules: no_merge, basecall_staging, pilon_ranges, pilon_aggregate_vcf, assem
 fq_files_dict = {}
 fast5_files_dict = {}
 fast5_basename_to_path = {}
+sr_polish_dict = {}
 with open(config['file_names_txt'],'r') as f:
     
     for line in f:
@@ -41,9 +42,19 @@ with open(config['file_names_txt'],'r') as f:
             for f in fast5_files_dict[sample]:
                 fast5_basename_to_path[os.path.splitext(os.path.basename(f))[0]] = f
 
+        # if items is length 3, then we have a SR dataset as well
+        if len(items)==3:
+        	split_reads = items[2].split(',')
+        	# don't think I need to check this as single end should also be supported
+        	# if len(split_reads) != 2:
+        		# sys.exit("Short reads specifiied must be length 2 and separated by a comma. You gave: " + items[2])
+        	sr_polish_dict[sample] = split_reads
+        else: 
+        	sr_polish_dict[sample] = ''
+
 
 # print(fq_files_dict)
-# print(fast5_files_dict)
+print(sr_polish_dict)
 
 #set up singularity image used for the bulk of rules
 singularity_image = "shub://elimoss/lathe:longread"
@@ -285,10 +296,13 @@ def choose_polish(wildcards):
     #skip_polishing config variable.
     if 'skip_polishing' in config and (config['skip_polishing'] == True or config['skip_polishing'] == 'True'):
         return(rules.assemble_final.output)
-    elif config['short_reads'] != '':
+        print(wildcards.sample + ": 1")
+    elif sr_polish_dict[wildcards.sample] != '':
         return(rules.pilon_consensus.output)
+        print(wildcards.sample + ": 2")
     else:
         return(rules.medaka_aggregate.output)
+        print(wildcards.sample + ": 3")
 
 def choose_pilon_input():
     #allows consensus refinement with both long read and short read polishing if the polish_both variable is given the value
@@ -399,18 +413,17 @@ rule align_short_reads:
     #Align short reads to the unpolished or longread-polished assembly, depending on the output of
     #the choose_pilon_input rule above.
     input:
-        choose_pilon_input(),
-        config['short_reads'].split(',')
+        ref = choose_pilon_input(),
+        reads = lambda wildcards: sr_polish_dict[wildcards.sample]
     output: "{sample}/2.polish/pilon/short_reads.bam"
     threads: 16
-    params:
-        reads = config['short_reads'].split(',')
     resources:
         mem=100,
         time=24
     singularity: singularity_image
     shell:
-        "bwa index {input[0]}; bwa mem -t {threads} {input} | samtools sort --threads {threads} > {output}"
+        "bwa index {input.ref}; bwa mem -t {threads} {input.ref} {input.reads} | \
+        	samtools sort --threads {threads} > {output}"
 
 checkpoint pilon_ranges:
     #Generate a large collection of intervals within the assembly for individual parallelized polishing with Pilon.

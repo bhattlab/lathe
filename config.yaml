@@ -17,7 +17,6 @@ min_contig_size: 0 #remove contigs smaller than this from the assembly (can spee
 skip_circularization: False
 skip_polishing: False
 polish_both: False #should the input to short read polishing be the output of long read polishing?
-short_reads: '' #Comma-separated forward and reverse optionally gzipped fastq files.  Optional.  If no reads are given, the pilon step is skipped.
 
 #the below options are all related to Canu. genome_size is used by Flye as well.
 canu_args: 'cnsThreads=2 cnsMemory=32'
