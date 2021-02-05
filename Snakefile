@@ -44,13 +44,13 @@ with open(config['file_names_txt'],'r') as f:
 
         # if items is length 3, then we have a SR dataset as well
         if len(items)==3:
-        	split_reads = items[2].split(',')
-        	# don't think I need to check this as single end should also be supported
-        	# if len(split_reads) != 2:
-        		# sys.exit("Short reads specifiied must be length 2 and separated by a comma. You gave: " + items[2])
-        	sr_polish_dict[sample] = split_reads
+            split_reads = items[2].split(',')
+            # don't think I need to check this as single end should also be supported
+            # if len(split_reads) != 2:
+                # sys.exit("Short reads specifiied must be length 2 and separated by a comma. You gave: " + items[2])
+            sr_polish_dict[sample] = split_reads
         else: 
-        	sr_polish_dict[sample] = ''
+            sr_polish_dict[sample] = ''
 
 
 # print(fq_files_dict)
@@ -423,7 +423,7 @@ rule align_short_reads:
     singularity: singularity_image
     shell:
         "bwa index {input.ref}; bwa mem -t {threads} {input.ref} {input.reads} | \
-        	samtools sort --threads {threads} > {output}"
+            samtools sort --threads {threads} > {output}"
 
 checkpoint pilon_ranges:
     #Generate a large collection of intervals within the assembly for individual parallelized polishing with Pilon.
