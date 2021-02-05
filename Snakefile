@@ -178,8 +178,7 @@ rule misassemblies_detect:
         mem=24,
         time=24
     singularity: "shub://elimoss/lathe:htsbox"
-    shell:
-        """
+    shell: """
         bedtools makewindows -g {input[1]} -w {params.window_width} | join - {input[1]} | tr ' ' '\t' | \
         cut -f1-4 | awk '{{if ($2 > {params.window_width} && $3 < $4 - {params.window_width} && $4 > {params.min_tig_size}) print $0}}' | \
         xargs -P 16 -l bash -c '
@@ -200,8 +199,7 @@ rule misassemblies_correct:
     output:
         "{sample}/{sequence}.corrected.fa{sta}"
     singularity: singularity_image
-    shell:
-        """
+    shell: """
         if [ -s {input[0]} ] #if the input is nonempty...
         then
             cat {input[0]} | grep -v ^# | sort -k1,1 -k2,2g | join - <(cat {input[1]} | sort -k1,1 -k2,2g) | \
@@ -332,8 +330,7 @@ rule racon:
     resources:
         mem=48,
         time=24
-    shell:
-        """
+    shell: """
         racon -m 8 -x -6 -g -8 -w 500 -t {threads} {input} > {output}
         """
 
@@ -345,8 +342,7 @@ checkpoint medaka_ranges:
         directory('{sample}/2.polish/medaka/ranges'),
         directory('{sample}/2.polish/medaka/sub_fa')
     singularity: singularity_image
-    shell:
-        """
+    shell: """
         mkdir -p {output}
         cut -f1 {input[1]} | xargs -n 1 -I foo sh -c 'touch {output[0]}/foo; samtools faidx {input[0]} foo > {output[1]}/foo.fa'
         """
@@ -363,8 +359,7 @@ rule medaka_consensus:
     resources:
         mem=lambda wildcards, attempt: attempt * 8,
         time=lambda wildcards, attempt: attempt * 12
-    shell:
-        """
+    shell: """
         medaka consensus {input[1]} {output} --model r941_flip213 --threads {threads} --regions {wildcards.range}
         """
 
@@ -380,8 +375,7 @@ rule medaka_stitch:
         mem=16,
         time=12
     singularity: singularity_image
-    shell:
-        """
+    shell: """
         medaka stitch {input[0]} {input[1]} {output}
         """
 
@@ -404,8 +398,7 @@ rule medaka_aggregate:
     output: "{sample}/2.polish/medaka/{sample}_medaka.fa"
     params:
         indir = "{sample}/2.polish/medaka/sub_fa/*"
-    shell:
-        """
+    shell: """
         cat {params.indir} | cut -f1 -d ':' > {output}
         """
 
@@ -434,8 +427,7 @@ checkpoint pilon_ranges:
         choose_pilon_input()[0] + '.fai'
     output: directory('{sample}/2.polish/pilon/ranges')
     singularity: singularity_image
-    shell:
-        """
+    shell: """
         mkdir {output}
         bedtools makewindows -w 100000 -g {input[1]} | awk '{{print $1,\":\", $2+ 1, \"-\", $3}}'  | tr -d ' ' |
         xargs -n 1 -I foo touch {output}/foo
@@ -461,16 +453,17 @@ rule pilon_subsetrun:
         bam = "{sample}/2.polish/pilon/sub_runs/{range}/{sample}_{range}.bam",
         fa = "{sample}/2.polish/pilon/sub_runs/{range}/{sample}_{range}.fa",
         subrun_folder = "{sample}/2.polish/pilon/sub_runs/{range}",
-        target_coverage = 50
-    shell:
-        """
+        target_coverage = 50,
+        sample="{sample}",
+        myrange="{range}"
+    shell: """
         # set env var $i to be the smallest read subset decimal (in increments of 0.1, with a couple very low values thrown in, too)
         # sufficient to generate at least 40x coverage depth of the target sequence, or
         # 1 if 40x coverage cannot be achieved with the available read data
 
         for i in 0.01 0.05 $(seq 0.1 0.1 1);
         do
-           cov=$(samtools view {input[1]} -s $i -h {wildcards.range} | samtools depth - | cut -f3 | awk '{{sum+=$1}}END{{print sum/(NR+1)}}')
+           cov=$(samtools view {input[1]} -s $i -h {params.myrange} | samtools depth - | cut -f3 | awk '{{sum+=$1}}END{{print sum/(NR+1)}}')
            if [ $(echo $cov'>'{params.target_coverage}|bc) -eq 1 ]
            then
                break
@@ -478,15 +471,15 @@ rule pilon_subsetrun:
         done
         echo Using $i x of total coverage;
 
-        samtools view -h -O BAM -s $i {input[1]} {wildcards.range} > {params.bam}
+        samtools view -h -O BAM -s $i {input[1]} {params.myrange} > {params.bam}
         samtools index {params.bam}
-        samtools faidx {input[0]} $(echo {wildcards.range}| cut -f1 -d ':') | cut -f1 -d ':' > {params.fa}
+        samtools faidx {input[0]} $(echo {params.myrange}| cut -f1 -d ':') | cut -f1 -d ':' > {params.fa}
         java -Xmx{params.java_mem}G -jar $(which pilon | sed 's/\/pilon//g')/../share/pilon*/pilon*.jar \
-            --genome {params.fa} --targets {wildcards.range} \
-            --unpaired {params.bam} --output {sample}_{wildcards.range} --outdir {params.subrun_folder} \
+            --genome {params.fa} --targets {params.myrange} \
+            --unpaired {params.bam} --output {params.sample}_{params.myrange} --outdir {params.subrun_folder} \
             --vcf --nostrays --mindepth 1
-        bgzip {params.subrun_folder}/{sample}_{wildcards.range}.vcf
-        tabix -fp vcf {params.subrun_folder}/{sample}_{wildcards.range}.vcf.gz
+        bgzip {params.subrun_folder}/{params.sample}_{params.myrange}.vcf
+        tabix -fp vcf {params.subrun_folder}/{params.sample}_{params.myrange}.vcf.gz
         """
 
 def aggregate_pilon_subsetruns(wildcards):
@@ -512,8 +505,7 @@ rule pilon_aggregate_vcf:
         time=4,
         mem=8
     singularity: singularity_image
-    shell:
-        """
+    shell: """
         #workaround!  Snakemake was causing the vcf's to appear newer than the indices, which tabix didn't like
         touch {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz.tbi
 
@@ -545,8 +537,7 @@ rule pilon_consensus:
     output:
         "{sample}/2.polish/pilon/{sample}_pilon.fa"
     singularity: singularity_image
-    shell:
-        """
+    shell: """
         bcftools consensus -f {input} -o {output}
         """
 
@@ -555,8 +546,7 @@ rule polish_final:
     #Colons and any following characters are omitted from contig names.
     input: choose_polish
     output: "{sample}/2.polish/{sample}_polished.fasta"
-    shell:
-        """
+    shell: """
         cut -f1 -d ':' {input} > {output}
         """
 
@@ -572,8 +562,7 @@ checkpoint extract_bigtigs:
     singularity: singularity_image
     params:
         min_size = 1700000
-    shell:
-        """
+    shell: """
         #mkdir {output}
         cat {input[1]} | awk '{{if ($2 > {params.min_size}) print $1}}' | xargs -n 1 -I foo sh -c "
             samtools faidx {input[0]} foo > {wildcards.sample}/3.circularization/1.candidate_genomes/foo.fa
@@ -589,8 +578,7 @@ rule circularize_bam2reads:
     output:
         "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}_terminal_reads.fq.gz"
     singularity: singularity_image
-    shell:
-        """
+    shell: """
         (samtools idxstats {input[0]} | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", $2-50000, "-", $2; else print $1, ":", 1, "-", $2 }}' | tr -d ' ';
          samtools idxstats {input[0]} | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", 1, "-", 50000; else print $1, ":", 1, "-", $2 }}' | tr -d ' ') |
         xargs -I foo sh -c 'samtools view -h {input[0]} foo | samtools fastq - || true' | paste - - - - | sort | uniq | tr '\t' '\n' | bgzip > {output}
@@ -609,8 +597,7 @@ rule circularize_assemble:
         time=4,
         mem=32
     threads: 4
-    shell:
-        """
+    shell: """
         flye -t {threads} --nano-raw {input} -o {params.directory} -g 1m
         """
         #needed for canu:
@@ -637,8 +624,7 @@ rule circularize_spantig_pre:
     resources:
         time=4,
         mem=16
-    shell:
-        """
+    shell: """
         nucmer -b 5000 {input[0]} {input[1]} -p {params.directory}/{params.prefix} #-t {threads} #reverted nucmer back down to 3, no more multithreading :(
 
         delta-filter -q {params.directory}/{params.prefix}.delta > {params.directory}/{params.prefix}.filt.delta
@@ -756,8 +742,7 @@ rule circularize_final:
         '{sample}/3.circularization/4.{sample}_circularized.fasta'
     threads: 1
     singularity: singularity_image
-    shell:
-        """
+    shell: """
         find {wildcards.sample}/3.circularization/3.circular_sequences/sh/ -type f | xargs cat | bash
         ls {wildcards.sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1-2 -d '_' > circs.tmp || true
         (cat {input[1]} | grep -vf circs.tmp |
