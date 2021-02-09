@@ -1,7 +1,7 @@
 '''
-Long read assembly and post-processing workflow for assembling genomes from metagenomes.
+Long read assembly and post-processing workflow for assembling genomes from isolates and metagenomes.
 
-Authors: Eli Moss and Benjamin Siranosian
+Authors: Eli Moss, Benjamin Siranosian, Dylan Maghini
 '''
 
 import os
@@ -12,7 +12,7 @@ import snakemake
 
 localrules: no_merge, basecall_staging, pilon_ranges, pilon_aggregate_vcf, assemble_final, faidx, extract_bigtigs, circularize_final, polish_final
 
-# new sample input file has three columns, third is optional and only 
+# new sample input file has three columns, third is optional and only
 # necessary if doing short read polishing
 # SAMPLE    FAST5/FQ    SHORT_READS
 fq_files_dict = {}
@@ -20,7 +20,7 @@ fast5_files_dict = {}
 fast5_basename_to_path = {}
 sr_polish_dict = {}
 with open(config['file_names_txt'],'r') as f:
-    
+
     for line in f:
         items = line.split()
         if len(items) == 1 or items[0] == 'Sample' or items[0] == '#Sample' or items[0].startswith('#'):
@@ -32,7 +32,7 @@ with open(config['file_names_txt'],'r') as f:
             fast5_files_dict[sample] = ""
 
         # Otherwise we assume its a fast5 directory
-        else: 
+        else:
             # find fast5 files. These are expected to be below the directory provided in the config.
             # All fast5's below this directory will be processed.
             # list provided directory recursively
@@ -49,7 +49,7 @@ with open(config['file_names_txt'],'r') as f:
             # if len(split_reads) != 2:
                 # sys.exit("Short reads specifiied must be length 2 and separated by a comma. You gave: " + items[2])
             sr_polish_dict[sample] = split_reads
-        else: 
+        else:
             sr_polish_dict[sample] = ''
 
 
@@ -157,7 +157,7 @@ rule assemble_flye:
         time=100
     singularity: "docker://quay.io/biocontainers/flye:2.4.2--py27he860b03_0"
     shell:
-        "flye -t {threads} --nano-raw {input} --meta -o {wildcards.sample}/1.assemble/assemble_{wildcards.genome_size}/ -g {wildcards.genome_size}"
+        "flye -t {threads} --meta --nano-raw {input} -o {wildcards.sample}/1.assemble/assemble_{wildcards.genome_size}/ -g {wildcards.genome_size}"
 
 rule misassemblies_detect:
     #Detect regions in the assembly which are not spanned by more than a single long read, indicating likely misassemblies.
@@ -222,8 +222,18 @@ rule misassemblies_correct:
             | cut -f1 -d ':' | awk '(/^>/ && s[$0]++){{$0=$0\"_\"s[$0]}}1;' > {output[0]}
 
             cut -f1 {input[0]} > {wildcards.sample}/{wildcards.sequence}.tigs.toremove
-            grep -vf {wildcards.sample}/{wildcards.sequence}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
-            rm {wildcards.sample}/{wildcards.sequence}.tigs.toremove
+
+            # DM: temp fix to skip misassembly if formatting fails
+            x=$(cat {input[1]} | wc -l)
+            if [ $x -gt 1 ]
+            then
+                grep -vf {wildcards.sample}/{wildcards.sequence}.tigs.toremove {input[1]} | cut -f1 | xargs samtools faidx {input[2]} >> {output[0]}
+                rm {wildcards.sample}/{wildcards.sequence}.tigs.toremove
+            else
+                cp {input[2]} {output}
+                echo "Misassembly error: skipping misassembly removal"
+            fi
+
         else
             cp {input[2]} {output}
         fi
