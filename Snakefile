@@ -514,20 +514,22 @@ rule pilon_aggregate_vcf:
     resources:
         time=4,
         mem=8
+    params:
+        sample="{sample}"
     singularity: singularity_image
     shell: """
         #workaround!  Snakemake was causing the vcf's to appear newer than the indices, which tabix didn't like
-        touch {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz.tbi
+        touch {params.sample}/2.polish/pilon/sub_runs/*/*.vcf.gz.tbi
 
         #get properly sorted intervals
-        ls {sample}/2.polish/pilon/ranges/ | tr ':-' '\t' | sort -k1,1 -k2,2g | awk '{{print $1,":",$2,"-",$3}}' | tr -d ' ' > sorted_ranges.tmp
+        ls {params.sample}/2.polish/pilon/ranges/ | tr ':-' '\t' | sort -k1,1 -k2,2g | awk '{{print $1,":",$2,"-",$3}}' | tr -d ' ' > sorted_ranges.tmp
 
         #get header
-        (zcat {sample}/2.polish/pilon/sub_runs/*/*.vcf.gz | head -1000 | grep ^#
+        (zcat {params.sample}/2.polish/pilon/sub_runs/*/*.vcf.gz | head -1000 | grep ^#
 
         #get corrections within each range (omitting DUP records, which bcftools can't understand)
         cat sorted_ranges.tmp | xargs -n 1 -I foo sh -c "
-        tabix {sample}/2.polish/pilon/sub_runs/foo/{sample}_foo.vcf.gz foo | grep -v '0/0' | grep -v DUP" |
+        tabix {params.sample}/2.polish/pilon/sub_runs/foo/{params.sample}_foo.vcf.gz foo | grep -v '0/0' | grep -v DUP" |
 
         #sort by position
         sort -k1,1 -k2,2g) |
@@ -571,11 +573,12 @@ checkpoint extract_bigtigs:
     output: directory("{sample}/3.circularization/1.candidate_genomes/")
     singularity: singularity_image
     params:
-        min_size = 1700000
+        min_size = 1700000,
+        sample = "{sample}"
     shell: """
         #mkdir {output}
         cat {input[1]} | awk '{{if ($2 > {params.min_size}) print $1}}' | xargs -n 1 -I foo sh -c "
-            samtools faidx {input[0]} foo > {wildcards.sample}/3.circularization/1.candidate_genomes/foo.fa
+            samtools faidx {input[0]} foo > {params.sample}/3.circularization/1.candidate_genomes/foo.fa
         "
         """
 
@@ -587,10 +590,12 @@ rule circularize_bam2reads:
         rules.polish_final.output[0] + '.bam.bai',
     output:
         "{sample}/3.circularization/2.circularization/spanning_tig_circularization/{tig}/{tig}_terminal_reads.fq.gz"
+    params:
+        tig = "{tig}"
     singularity: singularity_image
     shell: """
-        (samtools idxstats {input[0]} | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", $2-50000, "-", $2; else print $1, ":", 1, "-", $2 }}' | tr -d ' ';
-         samtools idxstats {input[0]} | grep {wildcards.tig} | awk '{{if ($2 > 50000) print $1, ":", 1, "-", 50000; else print $1, ":", 1, "-", $2 }}' | tr -d ' ') |
+        (samtools idxstats {input[0]} | grep {params.tig} | awk '{{if ($2 > 50000) print $1, ":", $2-50000, "-", $2; else print $1, ":", 1, "-", $2 }}' | tr -d ' ';
+         samtools idxstats {input[0]} | grep {params.tig} | awk '{{if ($2 > 50000) print $1, ":", 1, "-", 50000; else print $1, ":", 1, "-", $2 }}' | tr -d ' ') |
         xargs -I foo sh -c 'samtools view -h {input[0]} foo | samtools fastq - || true' | paste - - - - | sort | uniq | tr '\t' '\n' | bgzip > {output}
         """
 
@@ -751,12 +756,14 @@ rule circularize_final:
     output:
         '{sample}/3.circularization/4.{sample}_circularized.fasta'
     threads: 1
+    params:
+        sample = "{sample}"
     singularity: singularity_image
     shell: """
-        find {wildcards.sample}/3.circularization/3.circular_sequences/sh/ -type f | xargs cat | bash
-        ls {wildcards.sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1-2 -d '_' > circs.tmp || true
+        find {params.sample}/3.circularization/3.circular_sequences/sh/ -type f | xargs cat | bash
+        ls {params.sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1-2 -d '_' > circs.tmp || true
         (cat {input[1]} | grep -vf circs.tmp |
-        cut -f1 | xargs samtools faidx {input[0]}; ls {wildcards.sample}/3.circularization/3.circular_sequences/* | grep .fa$ | xargs cat) |
+        cut -f1 | xargs samtools faidx {input[0]}; ls {params.sample}/3.circularization/3.circular_sequences/* | grep .fa$ | xargs cat) |
         tr -d '\\n' | sed 's/\\(>[contigscaffold_]*[0-9]*\\)/\\n\\1\\n/g' | fold -w 120 | cut -f1 -d ':' | grep -v '^$' > {output} || true
         rm circs.tmp
         """
