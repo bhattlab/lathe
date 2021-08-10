@@ -19,6 +19,8 @@ fq_files_dict = {}
 fast5_files_dict = {}
 fast5_basename_to_path = {}
 sr_polish_dict = {}
+min_contig_size = config["min_contig_size"]
+
 with open(config['file_names_txt'],'r') as f:
 
     for line in f:
@@ -109,8 +111,10 @@ rule basecall_final:
     #Collate called bases into a single fastq file
     input: lambda wildcards: expand('{{sample}}/0.basecall/raw_calls/{foo}/sequencing_summary.txt', foo = [os.path.basename(f).split('.')[0] for f in fast5_files_dict[wildcards.sample]])
     output: '{sample}/0.basecall/{sample}.fq'
+    params:
+        sample="{sample}"
     shell:
-        "find {sample}/0.basecall/raw_calls/*/*.fastq | xargs cat > {output}"
+        "find {params.sample}/0.basecall/raw_calls/*/*.fastq | xargs cat > {output}"
 
 rule nanoplot:
     #Run nanoplot on the collated .fq file containing basecalled reads. This produces helpful stats
@@ -141,7 +145,7 @@ rule assemble_canu:
     shell:
         "canu -p {sample}_{wildcards.genome_size} -d {sample}/1.assemble/assemble_{wildcards.genome_size}/ -nanopore-raw {input} " +
         config['canu_args'] +
-        " stopOnReadQuality=false genomeSize={wildcards.genome_size} " +
+        " genomeSize={wildcards.genome_size} " + #  stopOnReadQuality=false
         "useGrid={grid} gridOptions='{opts}'".format(
             grid = config['usegrid'],
             opts = config['grid_options']
@@ -154,7 +158,7 @@ rule assemble_flye:
     threads: 16
     resources:
         mem=100,
-        time=100
+        time=24
     singularity: "docker://quay.io/biocontainers/flye:2.4.2--py27he860b03_0"
     shell:
         "flye -t {threads} --meta --nano-raw {input} -o {wildcards.sample}/1.assemble/assemble_{wildcards.genome_size}/ -g {wildcards.genome_size}"
@@ -271,11 +275,14 @@ def choose_merge():
 rule contig_size_filter:
     #Optional convenience function. Filter out contigs below a certain size. Not used by default,
     #but requested by users with specific use cases.
+    # DM: changed contig_cutoff to min_contig_size
     input:
         choose_merge()[0],
         choose_merge()[0] + '.fai'
-    output: '{sample}/1.assemble/{sample}_merged_mincontig_{contig_cutoff}.fasta',
-    shell: "sort -k2,2gr {input[1]} | awk '{{if ($2 > {wildcards.contig_cutoff}) print $1}}' | xargs samtools faidx {input[0]} > {output}"
+    output: '{sample}/1.assemble/{sample}_merged_mincontig_{params.min_contig_size}.fasta'
+    params:
+        min_contig_size = min_contig_size
+    shell: "sort -k2,2gr {input[1]} | awk '{{if ($2 > {params.min_contig_size}) print $1}}' | xargs samtools faidx {input[0]} > {output}"
 
 def choose_contig_cutoff(wildcards):
     #If a contig cutoff is specified in the config, then perform a size cutoff on the assembled contigs by
@@ -760,6 +767,8 @@ rule circularize_final:
         sample = "{sample}"
     singularity: singularity_image
     shell: """
+        mkdir -p {params.sample}/3.circularization/3.circular_sequences/sh/
+        touch {params.sample}/3.circularization/3.circular_sequences/sh/dummy
         find {params.sample}/3.circularization/3.circular_sequences/sh/ -type f | xargs cat | bash
         ls {params.sample}/3.circularization/3.circular_sequences/ | grep .fa$ | cut -f1-2 -d '_' > circs.tmp || true
         (cat {input[1]} | grep -vf circs.tmp |
